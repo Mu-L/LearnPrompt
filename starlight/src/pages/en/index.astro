@@ -1,0 +1,113 @@
+---
+import "../../styles/home-en.css";
+
+const base = import.meta.env.BASE_URL === "/" ? "" : import.meta.env.BASE_URL.replace(/\/$/, "");
+const withBase = (href: string) => (href.startsWith("/") ? `${base}${href}` : href);
+
+const steps = [
+  {
+    index: "01",
+    title: "Frame the task",
+    body: "Turn a vague request into context, an observable goal, explicit boundaries, and a verification contract.",
+    href: "/en/start-here/context-task-verification/",
+  },
+  {
+    index: "02",
+    title: "Choose the shortest path",
+    body: "Use your current failure mode and desired artifact to select a practical route through LearnPrompt.",
+    href: "/en/start-here/ai-practice-map/",
+  },
+  {
+    index: "03",
+    title: "Ship verifiable evidence",
+    body: "Keep the diff, the command output, the visual check, and one lesson the next session can reuse.",
+    href: "/en/start-here/",
+  },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LearnPrompt | Put AI to work in real projects</title>
+    <meta
+      name="description"
+      content="A practical English path into LearnPrompt: frame a real task, choose a workflow, and keep verifiable evidence."
+    />
+  </head>
+  <body>
+    <main class="lp-en-site">
+      <nav class="lp-en-nav" aria-label="Main navigation">
+        <a class="lp-en-brand" href={withBase("/en/")} aria-label="LearnPrompt English home">
+          <span>LearnPrompt</span>
+          <small>AI Practice Wiki</small>
+        </a>
+        <div class="lp-en-links">
+          <a href={withBase("/")} lang="zh-CN">中文</a>
+          <a href={withBase("/en/start-here/")}>Start</a>
+          <a href="#path">Path</a>
+          <a href="https://github.com/LearnPrompt/LearnPrompt" target="_blank" rel="noreferrer">GitHub</a>
+        </div>
+      </nav>
+
+      <section class="lp-en-hero" aria-labelledby="hero-title">
+        <div class="lp-en-copy">
+          <p class="lp-en-kicker">ENGLISH PREVIEW · VERTICAL SLICE / 2026</p>
+          <h1 id="hero-title"><span>Put AI</span><span>to work.</span></h1>
+          <p class="lp-en-meta">Task · Context · Boundaries · Verification · Memory</p>
+          <p class="lp-en-lede">
+            Start with one real task. Give the agent a contract, inspect the diff, run the checks,
+            and leave evidence another session can replay.
+          </p>
+          <div class="lp-en-actions">
+            <a class="lp-en-button lp-en-button-primary" href={withBase("/en/start-here/ai-practice-map/")}>
+              Explore the practice map
+            </a>
+            <a class="lp-en-button" href={withBase("/en/start-here/context-task-verification/")}>
+              Write a task contract
+            </a>
+          </div>
+        </div>
+
+        <div class="lp-en-frame" aria-label="LearnPrompt visual reel">
+          <video
+            src={withBase("/videos/wiki-transition-v1.mp4")}
+            autoplay
+            loop
+            muted
+            playsinline
+            preload="metadata"
+            poster={withBase("/images/wiki-transition-poster-v1.jpg")}
+          ></video>
+          <div class="lp-en-frame-overlay">
+            <span>Scene 002</span>
+            <strong>Idea → Task → Delivery → Memory</strong>
+          </div>
+        </div>
+      </section>
+
+      <section id="path" class="lp-en-path" aria-labelledby="path-title">
+        <div>
+          <p class="lp-en-kicker">ONE COMPLETE PATH · THREE PAGES</p>
+          <h2 id="path-title">A small English slice you can finish and verify.</h2>
+        </div>
+        <div class="lp-en-grid">
+          {steps.map((step) => (
+            <a href={withBase(step.href)}>
+              <span>{step.index}</span>
+              <h3>{step.title}</h3>
+              <p>{step.body}</p>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <footer class="lp-en-footer">
+        <span>© 2026 LearnPrompt</span>
+        <span>English preview · Chinese remains the root locale</span>
+      </footer>
+    </main>
+  </body>
+</html>

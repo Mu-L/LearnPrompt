@@ -1,0 +1,59 @@
+---
+import EnglishDocLayout from "../../../layouts/EnglishDocLayout.astro";
+
+const base = import.meta.env.BASE_URL === "/" ? "" : import.meta.env.BASE_URL.replace(/\/$/, "");
+const withBase = (href: string) => (href.startsWith("/") ? `${base}${href}` : href);
+---
+
+<EnglishDocLayout
+  title="LearnPrompt AI Practice Wiki"
+  description="Start from one real task and build a verifiable AI workflow across coding agents, skills, and project memory."
+  chineseHref="/start-here/"
+>
+  <p>
+    LearnPrompt is not a glossary to memorize. It is a practice wiki for turning a real task
+    into a result you can inspect, verify, and hand off.
+  </p>
+
+  <h2>Start with the task you have now</h2>
+  <table>
+    <thead><tr><th>Your situation</th><th>Start here</th><th>First artifact</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>The request is still vague</td>
+        <td><a href={withBase("/en/start-here/context-task-verification/")}>Context, Task, Boundaries, Verification</a></td>
+        <td>A task contract an agent can execute</td>
+      </tr>
+      <tr>
+        <td>You do not know what to learn first</td>
+        <td><a href={withBase("/en/start-here/ai-practice-map/")}>AI Practice Map</a></td>
+        <td>A short route based on your current failure</td>
+      </tr>
+      <tr>
+        <td>You already use coding agents</td>
+        <td><a href={withBase("/en/start-here/context-task-verification/#a-copyable-template")}>Write the contract first</a></td>
+        <td>A reviewable scope and acceptance gate</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>The smallest useful loop</h2>
+  <pre><code>pick one real task
+  → freeze context, goal, boundaries, and verification
+  → let the agent produce one small diff
+  → run deterministic and visual checks
+  → save one lesson the next session can reuse</code></pre>
+
+  <h2>What counts as evidence</h2>
+  <ol>
+    <li><strong>A reader task:</strong> what you can do after reading.</li>
+    <li><strong>A replayable case:</strong> including at least one failure or refusal.</li>
+    <li><strong>Executable verification:</strong> command, exit status, diff, receipt, or human checkpoint.</li>
+    <li><strong>Clear provenance:</strong> official sources, secondary maps, and local experiments are labeled separately.</li>
+  </ol>
+
+  <p>
+    This English preview is deliberately small. Chinese remains the complete root edition,
+    while these three pages demonstrate stable routing, explicit language links, and a complete learning loop.
+  </p>
+</EnglishDocLayout>

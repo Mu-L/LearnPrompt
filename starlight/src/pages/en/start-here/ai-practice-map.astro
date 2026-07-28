@@ -1,0 +1,52 @@
+---
+import EnglishDocLayout from "../../../layouts/EnglishDocLayout.astro";
+
+const base = import.meta.env.BASE_URL === "/" ? "" : import.meta.env.BASE_URL.replace(/\/$/, "");
+const withBase = (href: string) => (href.startsWith("/") ? `${base}${href}` : href);
+---
+
+<EnglishDocLayout
+  title="AI Practice Map"
+  description="Choose the shortest LearnPrompt path from your current failure mode and the artifact you want to keep."
+  chineseHref="/start-here/ai-practice-map/"
+>
+  <h2>This is an entry filter, not a course catalog</h2>
+  <p>Before choosing tools, answer three questions:</p>
+  <ol>
+    <li>Do I have a real project or a disposable practice repository?</li>
+    <li>Is the current failure in the task description, execution, verification, or continuity?</li>
+    <li>What artifact should still exist seven days from now?</li>
+  </ol>
+
+  <h2>Route by failure mode</h2>
+  <table>
+    <thead><tr><th>Failure you can observe</th><th>First move</th><th>Evidence to keep</th></tr></thead>
+    <tbody>
+      <tr><td>The agent changes the wrong thing</td><td>Write a <a href={withBase("/en/start-here/context-task-verification/")}>task contract</a></td><td>Allowed files, forbidden actions, and a visible outcome</td></tr>
+      <tr><td>The change looks finished but cannot be proved</td><td>Add deterministic, diff, and human checks</td><td>Raw commands, exit status, and a browser checkpoint</td></tr>
+      <tr><td>A long task drifts</td><td>Reduce it to one independently verifiable slice</td><td>A smaller diff and an explicit stop condition</td></tr>
+      <tr><td>The next session repeats the investigation</td><td>Save a handoff from facts, not chat memory</td><td>Current state, exact paths, next command, and open risk</td></tr>
+    </tbody>
+  </table>
+
+  <h2>A seven-day practice route</h2>
+  <table>
+    <thead><tr><th>Day</th><th>Action</th><th>Required evidence</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Pick a task that fits in one hour</td><td>Goal, scope, forbidden actions, acceptance</td></tr>
+      <tr><td>2</td><td>Ask for read-only exploration and a short plan</td><td>File list, risks, and open decisions</td></tr>
+      <tr><td>3</td><td>Implement one minimal slice</td><td>A readable diff without opportunistic refactors</td></tr>
+      <tr><td>4</td><td>Run the fastest relevant check</td><td>Command and exit status</td></tr>
+      <tr><td>5</td><td>Construct one failure or boundary case</td><td>The rejected input and the reason</td></tr>
+      <tr><td>6</td><td>Write back one reusable lesson</td><td>One short rule, memory, or checklist</td></tr>
+      <tr><td>7</td><td>Replay with a fresh reviewer</td><td>A result that does not depend on chat history</td></tr>
+    </tbody>
+  </table>
+
+  <h2>A simple decision</h2>
+  <p>
+    If the task still contains words such as “improve,” “fix,” or “clean up” without an observable
+    result, go to <a href={withBase("/en/start-here/context-task-verification/")}>Context, Task, Boundaries, Verification</a>.
+    If the contract is already clear, make one small change and keep the evidence.
+  </p>
+</EnglishDocLayout>

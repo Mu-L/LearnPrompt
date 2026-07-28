@@ -1,0 +1,70 @@
+---
+import EnglishDocLayout from "../../../layouts/EnglishDocLayout.astro";
+---
+
+<EnglishDocLayout
+  title="Context, Task, Boundaries, Verification"
+  description="Freeze a vague request into a four-part contract an agent can execute and a reviewer can verify."
+  chineseHref="/start-here/context-task-verification/"
+>
+  <h2>Why one-line requests fail</h2>
+  <p>
+    “Improve this page,” “fix login,” and “move the project to a new framework” express direction,
+    not a decision boundary. The agent must guess the entry point, finish line, allowed changes,
+    and verification method.
+  </p>
+
+  <table>
+    <thead><tr><th>Cell</th><th>Question</th><th>Minimum evidence</th></tr></thead>
+    <tbody>
+      <tr><td>Context</td><td>What is true now, and where is the entry point?</td><td>Repository, branch, key files, reproduction, or baseline</td></tr>
+      <tr><td>Task</td><td>Who can observe what change when this is done?</td><td>One visible or measurable outcome</td></tr>
+      <tr><td>Boundaries</td><td>What may change, what is forbidden, and when must work stop?</td><td>Allowed paths, hard stops, and escalation rules</td></tr>
+      <tr><td>Verification</td><td>What proves completion rather than plausibility?</td><td>Command, exit status, diff, page, or human checkpoint</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Make the outcome observable</h2>
+  <p>
+    Weak goal: “Improve onboarding.” Runnable goal: “A first-time reader can choose one of three
+    task-based routes within two clicks; every target route exists after the static build; no
+    external script is added.”
+  </p>
+
+  <h2>Set boundaries before execution</h2>
+  <ul>
+    <li><strong>File boundary:</strong> allowed paths and user changes that must be preserved.</li>
+    <li><strong>Action boundary:</strong> dependency installation, network access, deletion, commit, push, or deployment.</li>
+    <li><strong>Escalation boundary:</strong> secrets, paid calls, production data, or ambiguous product choices.</li>
+  </ul>
+
+  <h2>Verify at three levels</h2>
+  <ol>
+    <li><strong>Deterministic:</strong> tests, lint, typecheck, link scan, or validator.</li>
+    <li><strong>Change hygiene:</strong> <code>git diff --check</code>, changed-file list, and sensitive-data scan.</li>
+    <li><strong>Human:</strong> browser walkthrough, visual review, copy, and risk judgment.</li>
+  </ol>
+
+  <h2 id="a-copyable-template">A copyable template</h2>
+  <pre><code># Goal
+Who can observe what change when this is complete?
+
+# Context
+- Current state:
+- Key entry point:
+- Original evidence or error:
+
+# Scope and boundaries
+- Allowed files:
+- Forbidden actions:
+- Must request approval for:
+
+# Verification
+- Fastest relevant check:
+- Full mechanical check:
+- Human checkpoint:
+- Evidence to retain on failure:
+
+# Delivery
+Changes, evidence, open risks, and next action.</code></pre>
+</EnglishDocLayout>
