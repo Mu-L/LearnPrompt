@@ -1,0 +1,285 @@
+---
+title: "What Exactly Is an Agent Skill: When to Upgrade a Repeated Prompt into an On-Demand Work Package"
+description: "Use current official documentation and a real receipt-renaming case to determine Skill boundaries and when an ordinary prompt is worth upgrading."
+sidebar:
+  order: 1
+difficulty: beginner
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-12"
+reading_time: 14 minutes
+research_path: research/articles/what-are-agent-skills
+showcase_path: research/articles/what-are-agent-skills/showcase/receipt-renamer-skill
+showcase_status: verified
+quality_score: 96
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Beginner | 14 minutes | 2026-07-12 | LearnPrompt Editorial Team |
+
+You already have a prompt you use often. Whenever a similar task appears, you paste it in and add a few lines such as “process this directory this time,” “do not actually change files,” and “give me a plan at the end.” The first two times go fine. By the fifth, you start wondering: is this more than a prompt now? Should I make it a Skill?
+
+Many people get stuck here. It is not that they cannot write `SKILL.md`; they do not know **when a repeated task is worth upgrading into an on-demand work package**. Go further and you hit a second trap: Skill, `AGENTS.md` / `CLAUDE.md`, ordinary scripts, MCP, and plugin often appear together, but they are not the same layer. Mix up the boundaries and you either stuff all rules into global instructions, wrap a small local procedure in a heavy and expensive plugin, or leave only a script for the next person to read and guess how to use.
+
+This article answers only one central question: **what exactly is an Agent Skill, and when should you upgrade from an ordinary prompt?** It does not repeat the field guardrails, minimal template, and packaging steps already covered in [How to Write Your First SKILL.md](/en/agent-skills/first-skill-md/); that article covers “how to write,” while this one covers why to make one, when to make one, its boundaries, and when not to.
+
+## What you will be able to do after reading
+
+1. Explain from current official materials what a Skill is and why it is not “a longer prompt.”
+2. Distinguish the layers handled by prompts, Skills, `AGENTS.md` / `CLAUDE.md`, ordinary scripts, MCP, and plugins.
+3. Understand a real receipt-renaming case and decide why it is worth making into a Skill.
+4. Use a simple decision table to choose whether a repeated task should remain a prompt, become a Skill, or go straight to a script/MCP.
+
+## Do not rush to write: a Skill solves not “the prompt is not long enough,” but “the work package has not taken shape”
+
+First clarify the easiest thing to confuse: a prompt solves **what you want to do this time**; a Skill solves **when a similar task appears in the future, which workflow should be loaded on demand**.
+
+The open Agent Skills specification defines a Skill as a directory containing at least `SKILL.md`, with optional `scripts/`, `references/`, and `assets/`, progressively loaded in three layers: metadata, body, and resources. OpenAI's current Codex documentation likewise describes a Skill directly as an authoring format for “reusable workflows,” and recommends preferring instructions by default, introducing scripts only when deterministic behavior or external tools are necessary. Claude Code documentation uses a more intuitive test: when you keep pasting the same instructions, checklist, or multi-step procedure into chats, or a section of `CLAUDE.md` has grown into a procedure rather than a fact, it should become a Skill.
+
+These three primary sources are really saying the same thing: **a Skill's value is organizing a way of working that will happen again from a one-off prompt into a discoverable, reusable, on-demand work package with boundaries.**
+
+For a single intent, a prompt is enough. For example:
+
+```text
+Please organize today's 3 receipts into a dry-run rename plan.
+```
+
+This sentence can complete the task, but it does not solve three long-term problems:
+
+- When a similar task appears next time, how does the Agent know which procedure to reuse?
+- Which rules in this procedure are stable, and which are temporary context for this run?
+- Should deterministic naming rules and failure codes be re-explained repeatedly in a prompt, or moved down into scripts and policy files?
+
+Once these questions arise, you are no longer facing something solved by “adding one more prompt sentence.”
+
+## The real boundary: which part prompts, Skills, `AGENTS.md` / `CLAUDE.md`, scripts, MCP, and plugins each handle
+
+The most common misuse of these six mechanisms is not having no idea how to use them; it is **using the wrong layer for the wrong job**. Start with a division-of-work table:
+
+| Mechanism | What it answers | Typical vehicle | What it should not pretend to be |
+| --- | --- | --- |
+| prompt | What specifically must be done this time | One task description in chat | It should not handle long-term discoverability |
+| Skill | Which workflow, references, and boundaries to use for this kind of task | `SKILL.md` + `references/` + `scripts/` + `assets/` | It should not pretend to be a pure script |
+| `AGENTS.md` / `CLAUDE.md` | Rules that always apply in this repository/project | Durable project-guidance files | They should not be filled with on-demand procedures |
+| Ordinary script | Deterministic transformations and mechanical checks | `scripts/*.mjs` / `*.py` / `*.sh` | It should not explain when to use it |
+| MCP | Connect systems, data, and tools outside the local workspace | MCP server / connector | It should not explain a local procedure |
+| plugin | Distribution and installation layer | Installable package | It should not replace the workflow inside a Skill |
+
+Start with `AGENTS.md` / `CLAUDE.md`. OpenAI's customization documentation defines `AGENTS.md` as repository-level durable guidance that applies before the agent starts work, suitable for build/test commands, review expectations, and directory-level rules. Claude Code's features overview also places `CLAUDE.md` in persistent context and emphasizes that it is enduring context visible in every session.
+
+These files are best for things that are always true, such as:
+
+- Which build command to use.
+- Which directories may be changed.
+- Which checks must run before commit.
+- What format review output should take.
+
+They **are not suitable** for an entire concrete procedure only needed while “processing receipt renames.” Otherwise every session carries a long explanation that is not always useful.
+
+Now look at ordinary scripts. A script can perform a deterministic transformation, but it cannot naturally answer:
+
+- When should this script run?
+- Which policy file should be read first?
+- What do exit `21` and `23` mean to a human?
+- Is this run dry-run only?
+
+A script can do the work, but cannot explain “why do it now, and how should failure end?” That is precisely the gap a Skill fills.
+
+MCP is another layer. OpenAI's customization documentation defines it as access to external tools and shared systems; Claude Code's features overview says it “connects Claude to external services and tools.” In other words, MCP answers “**what can it connect to**,” not “**how should it work**.” If data is already in the local repository and the procedure needs no external system, forcing MCP adds boundaries and maintenance cost.
+
+Nor should plugins be confused with Skills. OpenAI's build-skills documentation describes a plugin as a distribution layer that others in the workspace can install; Claude's features overview likewise calls it a packaging layer that can bundle skills, hooks, subagents, and MCP servers. It handles “how to distribute and install,” not “how a particular task executes internally.”
+
+In one sentence: **a prompt is this run's intent; a Skill is an on-demand reusable workflow; `AGENTS.md` / `CLAUDE.md` are always-applicable rules; a script is deterministic transformation; MCP is external connectivity; and a plugin is the distribution layer.**
+
+## When a repeated task is genuinely worth upgrading into a Skill
+
+Not every frequently used prompt deserves to become a Skill. A practical test is whether it meets all four conditions below. This is LearnPrompt Editorial Team's operating model, not official terminology, but it does not conflict with the primary documentation.
+
+### 1. It recurs
+
+For a task done only once, use a prompt. A Skill brings directory structure, maintenance, documentation, tests, and triggering metadata; pay that cost only when similar tasks will recur.
+
+### 2. Its inputs, outputs, and stopping conditions are relatively stable
+
+You should at least know:
+
+- What the input generally looks like.
+- What the output generally looks like.
+- Which errors should stop immediately.
+- What counts as complete.
+
+If these still change, continue exploring with prompts first. Skill-ifying too early usually just freezes a vague procedure.
+
+### 3. It needs more than “this run's context”; it needs long-term discoverability
+
+If every time you must describe again “when users mention batch receipt naming, use this policy and follow this process,” that is already a discoverable capability rather than a one-off task description.
+
+### 4. One part naturally deserves deterministic implementation
+
+This is especially important. OpenAI's current documentation explicitly recommends instructions by default and scripts only when deterministic behavior or external tooling is needed. In other words, **a script is not a substitute for a Skill; it is the mechanical core most worth moving down inside a Skill.**
+
+For a task such as file naming, dates, amounts, slugs, and conflict detection should replay consistently. That is a strong signal that prompts alone are no longer enough: the work package should contain both a natural-language coordination layer and a deterministic execution layer.
+
+## Showcase: why a “batch expense-receipt rename plan” is already worth becoming a Skill
+
+To keep “when it is worth upgrading” from becoming an abstract principle, this article freezes a real replayable case: [`receipt-renamer-skill`](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/what-are-agent-skills/showcase/receipt-renamer-skill).
+
+Its goal is not to rename receipts directly, but a more conservative, engineering-oriented step: **first generate a dry-run rename plan, then let a person decide whether to rename files.**
+
+The repository Skill in the Showcase lives in `.agents/skills/receipt-renamer/` of a temporary fixture and contains:
+
+```text
+.agents/skills/receipt-renamer/
+├── SKILL.md
+├── scripts/plan-renames.mjs
+├── references/naming-policy.md
+└── assets/report-template.md
+```
+
+Responsibilities are deliberately separated:
+
+- `SKILL.md` coordinates: when to use it, what to read first, which command to run, how to interpret exit codes, and when to run tests again.
+- `references/naming-policy.md` defines the filename policy: `YYYY-MM-DD_merchant-slug_CURRENCYamount.pdf`.
+- `scripts/plan-renames.mjs` performs deterministic conversion: read a manifest, calculate target names, check missing `currency`, check conflicts, and output JSON and Markdown dry-run reports.
+- `assets/report-template.md` supplies the output template.
+
+This shows the boundary between Skills and scripts exactly. **A Skill cannot pretend to be a script.** Leaving precise naming logic in the natural-language body means making the model guess dates, amounts, and filename details again each time; leaving only the script removes the coordination layer of when to use it, why to stop, and how to report to a person.
+
+### Three kinds of fixtures
+
+This Showcase prepares at least three batches:
+
+- `normal-batch`: normal input; it should exit `0`.
+- `missing-currency-batch`: a receipt lacks `currency`; it should exit `21`.
+- `conflict-batch`: a target filename conflicts with an existing file; it should exit `23`.
+
+Run from the repository root:
+
+```bash
+node research/articles/what-are-agent-skills/showcase/receipt-renamer-skill/scripts/verify-showcase.mjs
+```
+
+The actual frozen results on 2026-07-12 were:
+
+```text
+normal_exit_code: 0
+missing_currency_exit_code: 21
+conflict_exit_code: 23
+privacy_exit_code: 0
+```
+
+Their deterministic meanings are also clear:
+
+- The normal batch reliably generates `reports/normal-batch-plan.json` and `reports/normal-batch-plan.md`.
+- When `currency` is absent, it does not continue guessing; it fails explicitly.
+- When a target name conflicts, it does not overwrite forcibly; it fails explicitly.
+- The public research pack passes privacy scan and stores no runtime ID, absolute local-machine path, or shell absolute path.
+
+### A real explicit Codex invocation: host blocked first, then successful outer rerun
+
+The user asked this article to make one real explicit Codex invocation in an isolated temporary Git repository, using `$receipt-renamer` on the normal batch. The first attempt in the writer sandbox was blocked by the read-only state DB and app-server initialization permission; this demonstrates a host boundary, not a Skill failure. The controller subsequently reran the identical fixture, prompt, and schema externally without changing the task contract.
+
+The final frozen real-run result was:
+
+- `status: completed`
+- `model: gpt-5.5`
+- `exec_exit_code: 0`
+- The return value explicitly records `skill_invocation: "$receipt-renamer"`
+- `changed_files: ["?? reports/"]`
+- `reports_written: json=true, markdown=true`
+- `npm test`: `4/4` passed
+- The three source PDFs retained their original names; the entire process was dry run only
+
+This outer rerun linked “explicitly load a Skill by name, read the policy, call a deterministic script, generate two reports, then run tests” into a complete evidence chain. Production workflow remained `partial` at first; an independent read-only reviewer then checked the article, research pack, rendered images, and frozen results. Only after 0/0/0 findings and 96/100 was it elevated to `verified`.
+
+![The loading chain from a one-off prompt through Skill metadata, Skill body, references/scripts, to an acceptable output](/images/articles/what-are-agent-skills/skill-load-chain.svg)
+*Caption: A one-off prompt first expresses “what to do this time.” Only when a task matches Skill metadata does the body load, followed by references and deterministic scripts on demand; only then is an acceptable output produced.*
+
+## The judgment behind the diagram: why a Skill is not another name for “script plus documentation”
+
+The diagram teaches an easily underestimated point: a Skill's key is not only its directory structure, but the **division of responsibility created by loading order**.
+
+The first layer is the prompt. It tells the Agent whether this is a normal batch or conflict batch, whether to run tests as well, and whether this run is dry-run or another task. Without it, the Agent does not know what to do now.
+
+The second layer is metadata. Both the open specification and current client documentation put `name` / `description` first. They are the foundation of discoverability: they decide whether this work package should appear for this kind of task. Without metadata, you have a lump of documentation with no entry point for when it should be loaded.
+
+The third layer is the Skill body. It answers “how to coordinate after entering”: confirm dry run, read the policy, run the script, then interpret failure codes. It is not a script's prose comment; it is the workflow itself.
+
+The fourth layer is resources. `references/` holds long explanations, `scripts/` holds deterministic logic, and `assets/` holds templates. They load on demand, reducing context waste while moving the portions most likely to become mechanical rules downward.
+
+Only then comes output. For this article, acceptable output is not “the model says it understands,” but:
+
+- A dry-run JSON plan.
+- A Markdown acceptance summary.
+- Or an explicit exit `21` / `23`.
+- Plus a stable privacy-scan result.
+
+This is why a Skill cannot be reduced to “a script plus a README.” A README is generally for people to read, and a script normally performs only deterministic transformation; a Skill packages “when to use, how to coordinate, where to read details, how to explain failure, and when work is complete” into an on-demand work package.
+
+## When not to make a Skill
+
+If this article discussed only when to make one, it would push readers to the opposite extreme: trying to Skill-ify every repeated task. In fact, many tasks are not worth it.
+
+### Situation one: it happens only once
+
+For a task done only once, there is no reason to maintain metadata, directory structure, and triggering guidance. A prompt is the cheapest form.
+
+### Situation two: rules are still being explored
+
+If you change the procedure every time after doing the task, keep exploring with prompts or simple notes. Stability, not aspiration, is the prerequisite for a Skill.
+
+### Situation three: one script is already enough
+
+For example, if you know you will always manually run one validation command and need neither discoverability, references, nor natural-language boundary explanations, a direct script is cleaner.
+
+### Situation four: what is missing is external connectivity, not procedure packaging
+
+If the essential problem is “I need the Agent to read Feishu, GitHub, or a database,” consider MCP first. A Skill can call these capabilities in a procedure, but it is not itself an external-system connector.
+
+### Situation five: you are solving team distribution rather than the procedure itself
+
+If the workflow is already mature and your next question is “how can colleagues install it too?”, shift attention from Skill design to the plugin/distribution layer rather than continuing to add things to `SKILL.md`.
+
+## A simple exercise: run your recently pasted prompt through the upgrade threshold
+
+Find a prompt you have pasted three or more times recently, and run it through this table:
+
+```yaml
+Recurs: yes / no
+Stable inputs and outputs: yes / no
+Needs long-term discoverability: yes / no
+Contains a part worth moving down into a deterministic script: yes / no
+If three or more of the four are yes:
+  Prefer considering a Skill
+If what is mainly missing is durable repo-level rules:
+  Prefer adding AGENTS.md or CLAUDE.md
+If what is mainly missing is external-system access:
+  Prefer MCP
+If it is only one fixed mechanical command:
+  Use a script directly
+```
+
+The observable completion criterion is not “you think it looks like one,” but that you can state clearly:
+
+1. What the prompt still determines for this run's intent.
+2. Which rules always apply and should not go in a Skill.
+3. Which parts should become scripts rather than repeated model guesses.
+4. Whether this capability will be reused only by you or also needs plugin distribution.
+
+If you cannot explain these four points, do not make a Skill yet. It has not grown into a real work package.
+
+## Sources and further reading
+
+- [Agent Skills Specification](https://agentskills.io/specification) (primary specification; supports directory structure, frontmatter, `scripts/` / `references/` / `assets/`, and progressive loading)
+- [OpenAI Learn: Build skills](https://learn.chatgpt.com/docs/build-skills) (primary documentation; supports Codex's `.agents/skills`, `$skill`, and boundaries between scripts and deterministic behavior)
+- [OpenAI Learn: Customization overview](https://learn.chatgpt.com/docs/customization/overview) (primary documentation; supports layers for `AGENTS.md`, Skills, and MCP)
+- [Claude Code Docs: Extend Claude with skills](https://code.claude.com/docs/en/slash-commands) (primary documentation; supports `/skill-name`, `.claude/skills`, and boundaries between `CLAUDE.md` and procedures)
+- [Claude Code Docs: Features overview](https://code.claude.com/docs/en/features-overview) (primary documentation; supports divisions among `CLAUDE.md`, Skills, MCP, and plugins)
+- [Claude Platform Docs: Agent Skills overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) (primary documentation; supports sharing and path boundaries across Claude surfaces)
+- [Agent Skills Orange Book repository](https://github.com/alchaincyf/agent-skills-orange-book) (Chinese thematic map / secondary material)
+
+Official material supports the current behavior in this article concerning Skill structure, paths, loading, layers, and surface boundaries, all rechecked on 2026-07-12. The offline replay, privacy scan, and outer real explicit Codex invocation of `receipt-renamer-skill` were also actually rerun that day.
+
+The Orange Book is used only as a thematic map for this conceptual article. This article read the conceptual passages of the local temporary mirror `agent-skills-orange-book-zh.txt` and `agent-skills-orange-book/README_zh.md` to organize the Chinese mental model; the author is Huashu. The repository README currently states that it is for personal learning reference only, provides no standard open-source license, and does not authorize unlicensed commercial distribution. This article copies no PDF body text, screenshots, or images; it retains only the link, author attribution, purpose, and limitation statement.

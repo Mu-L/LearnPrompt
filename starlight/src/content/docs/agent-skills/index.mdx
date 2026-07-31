@@ -1,0 +1,38 @@
+---
+title: Agent Skills 教程路线：把重复流程变成可触发、可验收的 Skill
+description: 学习 Skill 的触发条件、输入、步骤、工具边界和验证合同，避免把任何一段提示词都包装成 Skill。
+sidebar:
+  order: 0
+difficulty: beginner
+updated_from: "2026-07"
+author: LearnPrompt 编辑部
+verified_at: "2026-07-31"
+reading_time: 7 分钟
+legacy_status: current
+---
+
+一个流程重复三次，不代表马上应该写成 Skill。先确认它有稳定触发条件、明确输入输出、可调用工具和可重复验收，Skill 才会帮你减少漂移。
+
+## 从什么问题开始
+
+| 你现在遇到的事 | 先读 | 第一个可验收结果 |
+| --- | --- | --- |
+| 不知道什么流程值得技能化 | [Agent Skill 到底是什么](./what-are-agent-skills/) | “继续用 prompt”或“升级成 Skill”的判断 |
+| 想写第一个 SKILL.md | [第一个 SKILL.md](./first-skill-md/) | 一份包含触发、步骤与验证的最小 Skill |
+| Skill 经常在不该运行时被调用 | [触发规则与结构](./trigger-rules-and-structure/) | 一份可检查的触发与拒绝边界 |
+
+## 一条可复用的学习路线
+
+1. 先收集稳定重复的任务，而不是把一次性指令直接固化成资产。
+2. 给 Skill 写清输入、工具、步骤、失败态和人需要确认的动作。
+3. 用 [检查清单型 Skill 设计](./checklist-skill-design/) 为输出留下可重复运行的验收门。
+
+## 读完要留下什么
+
+- 一份知道何时运行、何时拒绝的触发合同。
+- 一套最小输入、输出和外部依赖说明。
+- 一个不会只依赖模型自述的检查或 receipt。
+
+## 继续前进
+
+如果你的 Skill 要调用外部服务，继续读 [API 集成型 Skill 设计](./api-integration-skill-design/)。当 Skill 之间要串成流水线时，再看 [Pipeline Skill 设计](./pipeline-skill-design/)。

@@ -1,0 +1,270 @@
+---
+title: "Codex CLI Starter Workflow: Turn a Chat into a Verifiable Closed Loop"
+description: Learn to inspect the directory and worktree, freeze a contract, make the smallest change, test, inspect the diff, and report structurally through one real codex exec run in an isolated receipt-normalizer repository.
+sidebar:
+  order: 1
+difficulty: beginner
+source_repo: alchaincyf/codex-orange-book
+source_url: https://github.com/alchaincyf/codex-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-11"
+reading_time: 14 minutes
+research_path: research/articles/codex-cli-workflow
+showcase_path: research/articles/codex-cli-workflow/showcase
+showcase_status: verified
+quality_score: 98
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Beginner | 14 minutes | 2026-07-11 | LearnPrompt Editorial Team |
+
+You can already talk with Codex in a terminal and have seen plenty of “ask an Agent to change some code” demonstrations. But when you do it yourself, the easiest thing to get wrong is not the code: it is an open workflow. You do not know whether it read the right directory, whether changes stayed in allowed files, whether tests and the diff were actually inspected, and in the end all you receive is “I fixed it.”
+
+This article is not about writing a more impressive prompt. It addresses a more basic and easily missed question: **how can a beginner turn Codex CLI from a one-off chat into a verifiable closed loop of “inspect directory and worktree → freeze a task contract → make the smallest change → test → inspect diff → report structurally”?**
+
+Rather than stage a vague demonstration in a large repository, we create an isolated Git repository named `receipt-normalizer` outside the LearnPrompt worktree. It contains one implementation file with a reproducible bug, one frozen contract, and a test suite. We then run `codex exec` from `codex-cli 0.142.2` for real, requiring it to change only that implementation file, run tests, and emit a structured final report. Raw `stdout` JSONL, `stderr`, and final JSON first go to a system temporary directory; after verification, sanitized artifacts return to the research pack. Finally, a deterministic gate that **does not call a model** proves that a good patch passes while a deliberately bad patch changing README consistently returns a nonzero exit code.
+
+:::note[This is not a model benchmark]
+This Showcase verifies whether a workflow closes its loop. It does not compare model rankings or generalize one successful run into “Codex is best” or “every repository suits exec.” Its units of comparison are engineering interfaces: directory, permissions, contract, patch, tests, diff, and report.
+:::
+
+## What you will be able to do after reading
+
+After reading, you should be able to do four things independently:
+
+1. Distinguish the roles of interactive `codex` and automated `codex exec`, instead of treating them as “the same chat box with another command.”
+2. Inspect the directory, worktree, Git repository, and permission arguments before a run, then freeze a contract a machine can execute and you can review.
+3. Make `codex exec` change only the smallest scope, run tests, and output a JSON report rather than merely a natural-language summary.
+4. Turn a model run into an offline-replayable patch plus gate instead of opening another model every time to ask whether the result is acceptable.
+
+## First distinguish interactive `codex` from automated `codex exec`
+
+Many people begin with: “I need to fix this bug—should I run `codex exec` directly, or discuss it for a few turns first?” The reliable answer does not depend on task size. It depends on **whether the requirement has already been frozen**.
+
+| Situation | Interactive `codex` fits better | `codex exec` fits better |
+| --- | --- | --- |
+| You do not yet know which files should change | Yes | No |
+| You need to inspect the repository and ask follow-up questions | Yes | No |
+| Allowed scope, prohibited scope, and verification commands are clear | No | Yes |
+| The result must enter a script, CI, or release gate | No | Yes |
+| You want a machine-readable final result | Sometimes | Yes |
+
+Interactive `codex` is for discovery. Read the directory, inspect neighboring files, and ask the few questions that genuinely affect the outcome; then a person freezes the task boundary. `codex exec` takes over after discovery: **once boundaries are clear, do not ask the model to guess while it works—let it perform one minimal execution within a fixed contract.**
+
+That is why official documentation places `codex exec` in the context of scripts and CI. It is not “a more powerful chat”; it is an execution surface better suited to a pipeline.
+
+:::caution[If you need `resume`, do not assume `--ephemeral` first]
+`codex exec resume --last` requires a recorded session; `--ephemeral` means rollout files are not persisted to disk. Neither is superior: use recorded exec for a multi-stage pipeline that must continue, and `--ephemeral` for one-off automation outside the worktree with minimal traces.
+:::
+
+## A closed loop starts by inspecting the directory and worktree
+
+A beginner's most common mistake is not “the model wrote bad code,” but **failing to confirm the execution target at all**. You think you are fixing the current repository while the Agent may be in the wrong directory; you think the patch changes one file while the worktree already has unrelated uncommitted changes; you plan to accept it with a diff while the directory is not even a Git repository.
+
+So the first step is not a prompt. It is four hard checks:
+
+1. Is the current directory the repository you intend to change?
+2. Is `git status --short` clean, or do you explicitly know which dirty changes are baseline?
+3. Is the current directory a Git repository?
+4. Are this run's permissions explicit rather than inherited from a high-permission local default?
+
+The official Non-interactive mode documentation explicitly states that `codex exec` normally requires running in a Git repository; skipping that requires `--skip-git-repo-check`. This is not ceremony: without Git, the later `diff`, patch artifact, and deterministic gate lose their foundation.
+
+Local `codex --help` and `codex exec --help` reveal another useful detail: `--ask-for-approval` is a **global flag**, not a local option in `codex exec --help`; meanwhile `--ephemeral`, `--json`, `--output-schema`, `--output-last-message`, and `--skip-git-repo-check` belong to `codex exec`. Do not recall details like this from an old tutorial; use the help output from 2026-07-11.
+
+## Freeze a task contract: a bug description is not a contract
+
+“Fix the receipt-number normalization bug” is a goal, not a contract. Automation closes its loop only when you fix the allowed scope and acceptance method in advance. This Showcase freezes the following contract:
+
+```json
+{
+  "goal": "Normalize receipt references to RCPT-#### while keeping the last four digits of the numeric sequence.",
+  "allowed_paths": ["src/normalizeReceipt.js"],
+  "forbidden_paths": ["README.md", "task-contract.json", "package.json", "test/"],
+  "required_checks": [
+    "git status --short",
+    "npm test",
+    "git diff --stat",
+    "git diff -- src/normalizeReceipt.js"
+  ]
+}
+```
+
+The important part is not `goal`, but the other three fields:
+
+- `allowed_paths` tells the Agent that, even if it imagines another approach, it may modify only this implementation.
+- `forbidden_paths` tells the later gate that even one extra README line is out of bounds.
+- `required_checks` tells automation that without inspecting tests and diff, the work is not complete.
+
+This is wholly different from “please try to change only one file.” The former is mechanically verifiable by a deterministic gate; the latter is only a polite request.
+
+![A single diagram of the closed loop among interactive codex, a frozen contract, codex exec, and a deterministic gate](/images/articles/codex-cli-workflow/codex-cli-closed-loop.svg)
+*Caption: Interactive codex handles discovery and freezing the contract; codex exec produces a patch, tests, diff, and report in an isolated repository; the deterministic gate no longer calls a model and only checks whether those artifacts satisfy the original contract.*
+
+## Showcase: run one real `codex exec` outside the worktree
+
+This Showcase does not experiment directly in the LearnPrompt repository or use a vague task such as “scan the directory.” First we create an isolated Git repository, `receipt-normalizer`, in a system temporary directory with only these files:
+
+```text
+README.md
+package.json
+task-contract.json
+src/normalizeReceipt.js
+test/normalizeReceipt.test.js
+```
+
+The tiny repository deliberately has one bug: the implementation uses `digits.slice(0, 4)`, while the contract requires normalization to retain **the last four digits of the numeric sequence**. Thus `rcpt-12034` currently becomes `RCPT-1203`, while the test expects `RCPT-2034`.
+
+Before calling a model for real, we encountered an important preflight fact: when the model was pinned to `gpt-5.6-sol`, `codex-cli 0.142.2` returned a 400 error saying that the model required a newer Codex version. This belongs in a tutorial because it shows:
+
+- Pinning a model is necessary, but only if **this machine and this CLI version can actually use it**.
+- A default model shown by doctor does not guarantee compatibility with a non-interactive run.
+- Automation should record a model-compatibility failure as an environment boundary rather than silently switch models and pretend it never happened.
+
+The actual Showcase therefore pins the model available on that machine, `gpt-5.5`, and explicitly runs:
+
+```bash
+codex -a never exec \
+  --cd <temp-repo> \
+  --ephemeral \
+  --ignore-user-config \
+  --ignore-rules \
+  --sandbox workspace-write \
+  --model gpt-5.5 \
+  --json \
+  --output-schema <schema-path> \
+  --output-last-message <temp-artifacts>/final-report.json \
+  - < prompt.txt
+```
+
+Each option solves a distinct problem:
+
+- `-a never`: fixes the approval policy so the run does not wait for human confirmation.
+- `--sandbox workspace-write`: permits automatic changes inside the isolated repo without opening broader host permissions.
+- `--ephemeral`: does not persist rollout files for this run to disk.
+- `--ignore-user-config` / `--ignore-rules`: does not inherit local default high-permission configuration or rule files.
+- `--json`: turns stdout into a JSONL event stream for scripts.
+- `--output-schema`: constrains the final answer to a fixed JSON shape.
+- `--output-last-message`: writes the final JSON separately so you do not need to extract the last line from JSONL.
+
+## Why stdout, stderr, patch, and report must be stored separately
+
+Official documentation makes an easily overlooked but crucial automation distinction: progress normally goes to `stderr` and the final message to `stdout`; with `--json`, `stdout` becomes a JSONL event stream.
+
+So do not mix all terminal output into one “log.” Handle it in layers:
+
+1. Raw `stdout.jsonl`: retained for scripts and later audit.
+2. Raw `stderr.log`: retains progress and environment warnings, but is not the final conclusion.
+3. `final-report.json`: the only final result accepted, constrained by the schema.
+
+The real run makes that boundary visible:
+
+- stdout contains not only the final `agent_message`, but `command_execution`, `file_change`, `turn.completed`, and other events.
+- stderr mainly contains local plugin / skills noise warnings, not a failure in `receipt-normalizer` itself.
+- What ultimately enters the gate is the sanitized `final-report.json`, a good patch, and test output—not natural-language fragments from stderr.
+
+The research pack's public `stdout-sanitized.jsonl` keeps no real thread / item / temporary path / absolute shell path. Those values were replaced with stable placeholders, and a same-directory `privacy-scan.mjs` mechanically scans them to prevent a writer from missing a redaction.
+
+The frozen minimum evidence from the research pack is verifiable:
+
+```diff
+-  return `RCPT-${digits.slice(0, 4).padStart(4, "0")}`;
++  return `RCPT-${digits.slice(-4).padStart(4, "0")}`;
+```
+
+The corresponding test output is:
+
+```text
+ℹ tests 4
+ℹ pass 4
+ℹ fail 0
+```
+
+The final structured report lists only `src/normalizeReceipt.js` in `files_changed`, and `diff_summary` explicitly says it retains the final four digits and pads them, rather than vaguely saying “bug fixed.”
+
+## A zero-model release gate: the good patch passes and the bad patch fails
+
+If the tutorial stopped here, it would still only be a successful model demonstration. A real closed loop goes one step further: **turn the model run into a patch artifact that can be checked offline.**
+
+At `research/articles/codex-cli-workflow/showcase/receipt-normalizer/scripts/release-gate.mjs`, this article does two things:
+
+1. Rebuild the baseline repository in a fresh temporary directory from `fixture/`.
+2. Mechanically validate the patch and final JSON, then rerun `npm test`.
+
+The positive gate does not ask whether a result “looks correct.” It checks concrete rules:
+
+- Whether all files changed by the patch are in `allowed_paths`.
+- Whether `goal`, `allowed_paths`, `forbidden_paths`, and `verify_command` in the final JSON match the frozen contract.
+- Whether `files_changed` is still only `src/normalizeReceipt.js`.
+- Whether `npm test` passes after applying the patch to a fresh repository.
+
+The negative case is not fictional either. It builds a real `bad.patch` that changes only README, adding `Unsafe manual README edit.`. The gate then returns nonzero exit code 3 during its file-scope check with:
+
+```text
+FAIL forbidden path in patch: README.md
+```
+
+This matters because, from here on, trust in the model run no longer rests on “it just said it did it right.” It rests on:
+
+- a replayable patch;
+- rerunnable tests;
+- rejectable file scope; and
+- comparable final-report fields.
+
+The research pack additionally freezes an offline replay command that can be copied from the repository root:
+
+```bash
+node research/articles/codex-cli-workflow/showcase/receipt-normalizer/scripts/verify-showcase.mjs
+```
+
+This replay does not call a model again. It reads only the frozen patch, final report, and sanitized artifacts; verifies the `good` gate exits `0`, fresh-repository tests remain `4/4`, the `bad` gate reliably exits `3` because `README.md` is out of scope, then runs the privacy scan once more.
+
+In other words, **what you reuse is not the model, but the artifact and acceptance gate the model produced.**
+
+## When not to use `codex exec`
+
+Some tasks should not be automated at the outset, or at least should not go straight to `codex exec`. Five common signals are:
+
+- You still cannot state which files may change.
+- You have no verification command and can only judge by eye that something “seems fixed.”
+- The task depends on local sign-in state, app state, or unfrozen external context.
+- You plan to let the model try while changing the goal on the fly.
+- What you want is a discussion of ideas, not a patch artifact.
+
+Return to interactive `codex` in those cases. Clarify the contract in conversation first, then hand the frozen version to `codex exec`. Mixing discovery and execution in one automation is often the beginner's biggest trap.
+
+One more boundary deserves separate emphasis: **do not package one successful run as a capability ranking.** `receipt-normalizer` is a minimal closed-loop example with one file, one test suite, and one contract. It can show that a workflow can be mechanically accepted; it cannot prove that one model or tool is “better overall.”
+
+## Exercise: write your next task as a contract
+
+Take a small task you would genuinely give to an Agent, no more than ten lines. Before running a model, write this card:
+
+```yaml
+goal: what behavior needs fixing
+repo_check: which directories / Git state need confirmation
+allowed_paths:
+forbidden_paths:
+verify:
+deliver:
+needs_interactive_codex_first: yes / no
+```
+
+Then ask only two questions:
+
+1. If the patch changes one extra README, can I reject it mechanically?
+2. If the test fails but the model says “it is fixed,” which will I trust?
+
+If you cannot answer both reliably, what you lack is not a stronger model but a firmer contract.
+
+## Sources and further reading
+
+- Official documentation: [Non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode)
+- Official documentation: [Developer commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli)
+- Official documentation: [Agent approvals & security](https://learn.chatgpt.com/docs/agent-approvals-security)
+- Official documentation: [Codex CLI](https://developers.openai.com/codex/cli)
+- Chinese secondary topic map: [Codex Orange Book](https://github.com/alchaincyf/codex-orange-book)
+
+Facts in this article about `codex exec`, `--ephemeral`, `--json`, `--output-schema`, `resume`, Git repository checks, sandboxing, and approvals are based on official documentation and local `codex-cli 0.142.2` `--help` / `doctor` output checked on 2026-07-11. The Codex Orange Book is retained only as a Chinese secondary topic map, with attribution and the [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) license stated by its repository; this article's structure, argument, and Showcase have been independently reorganized and verified.

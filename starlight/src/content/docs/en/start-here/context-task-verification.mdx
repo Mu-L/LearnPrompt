@@ -1,0 +1,158 @@
+---
+title: Task, Context, and Verification
+description: Freeze a vague request into an executable agent task using a four-box contract — context, task, boundaries, and verification.
+sidebar:
+  order: 4
+difficulty: beginner
+legacy_status: current
+---
+
+## Why a one-line request usually fails
+
+"Optimize this page," "fix the login," "migrate the project to a new framework" — these only convey direction, not decision boundaries for the agent. The agent has to guess the entry point, the definition of done, what it's allowed to change, and how to verify it. The more it has to guess, the less reviewable the result.
+
+An executable task needs to freeze at least four boxes:
+
+| Box | Question it answers | Minimum evidence |
+| --- | --- | --- |
+| Context | What's the current state, and where are the entry points and existing evidence? | Repo, branch, key files, a reproduction or baseline |
+| Task | What change will someone be able to observe once it's done? | A user-visible or system-testable result |
+| Boundaries | What can change, what can't, and when must you stop and ask? | Allowed paths, off-limits areas, high-risk actions |
+| Verification | What proves it's done, beyond "looks fine"? | Commands, exit codes, diffs, pages, or manual checks |
+
+## Step 1: Give only the context that's needed
+
+Context isn't every chat log and document dumped in at once. Prioritize:
+
+1. The real repo, current branch, and working-tree state.
+2. Entry-point files, run commands, and existing tests directly relevant to the task.
+3. Raw output of known failures, not a paraphrased "it errored."
+4. What's already been tried, and why it wasn't adopted.
+
+If the agent can confirm something with a read-only search, let it investigate and list the evidence first — don't write possibly-stale directories or APIs into the task from guesswork.
+
+## Step 2: Write the task as an observable change
+
+Weak task: "Improve the onboarding experience."
+
+Executable task: "A reader visiting `/start-here/` for the first time can reach the right tutorial for one of three task types; every entry link exists after a static build; the page adds no new external scripts."
+
+The second version still doesn't dictate specific layout or components, so implementation room remains — but it tells the reviewer exactly what to check.
+
+## Step 3: Write permission boundaries before execution
+
+Boundaries fall into at least three categories:
+
+- **File boundaries**: which paths may be modified, and which user changes must be preserved.
+- **Action boundaries**: whether installing dependencies, network access, deletion, committing, pushing, or deploying is allowed.
+- **Escalation boundaries**: must stop and ask when secrets, paid calls, production data, or ambiguous product decisions come up.
+
+"Be careful" is not a boundary. "You may edit two MDX files and your own research directory, but not config, and don't push" is.
+
+## Step 4: Make verification cover both the task and the boundaries
+
+A passing build only proves the project can be built — it doesn't automatically prove the links are correct, the page matches the reader's task, or nothing out of scope was touched. Split verification into three layers:
+
+| Layer | Examples | What it proves |
+| --- | --- | --- |
+| Deterministic checks | Tests, lint, typecheck, validators, link scans | The contract wasn't broken by a mechanical counter-example |
+| Change checks | `git diff --check`, file list, sensitive-data scan | The scope and basic hygiene of the change match requirements |
+| Manual checks | Browser walkthrough, visuals, copy, risk judgment | Experience and meaning a machine can't judge |
+
+Verification commands should be copyable, and manual checks should state exactly what to observe. Don't just write "please confirm yourself."
+
+## From a vague request to a task contract
+
+Vague version:
+
+```text
+Clean up LearnPrompt a bit and make it feel higher quality.
+```
+
+Frozen version:
+
+```md
+# Goal
+Upgrade the two start-here entry pages so that newcomers, existing
+Claude Code/Codex users, and people building long-term agent workflows
+can all reach their first in-depth tutorial within two clicks.
+
+# Context
+- Repo and branch: confirm with git status, don't guess from chat.
+- In-depth tutorials: 41 already verified; nav pages must not pose as
+  in-depth tutorials.
+- Existing sections: AI Coding, Claude Code, Codex, Agent Engineering,
+  Skills, Loop, Obsidian AI, Hermes/OpenClaw.
+
+# Boundaries
+- Only edit the two specified start-here MDX files.
+- Don't touch in-depth tutorials, components, dependencies, or site config.
+- No push, no deploy, no publish.
+
+# Verification
+- All internal links resolve to existing routes.
+- git diff --check passes.
+- The 49-page Starlight build passes.
+- A reviewer walks all three reader paths with no dead ends or broken promises.
+
+# Delivery
+- Two local commits, check results, and any open risks.
+```
+
+This contract doesn't decide every sentence for the writer, but it turns both "done" and "out of scope" into judgeable questions.
+
+## Five questions before the agent starts
+
+Have the executor answer these first:
+
+1. What do you think the target deliverable is, and what's explicitly out of scope?
+2. Which entry points will you read, and why is that enough information?
+3. Which files do you plan to change? Are there uncommitted user changes?
+4. What's the fastest relevant check, and what's the full check?
+5. Under what conditions would you stop and ask for authorization?
+
+If the answers are still vague, the task isn't frozen yet — don't move to auto-execution.
+
+## Common failures and fixes
+
+| Failure | Why it's dangerous | Fix |
+| --- | --- | --- |
+| Giving only a technical approach, no reader or product outcome | The agent might perfectly implement the wrong goal | Write the observable change first, then discuss the approach |
+| Treating the whole repo as default scope | Opportunistic refactors and overwritten user changes go unnoticed | Write allowed paths and explicit non-goals |
+| Verification is just "the build passes" | Semantic, link, and visual gaps go undetected | Add change checks and a manual pass |
+| "Use your judgment" when information is insufficient | High-risk choices get silently assumed | Write escalation conditions and default-safe actions |
+| Giving paths or commands that no longer exist | The contract is fake from the start | Confirm current state with read-only checks first |
+
+## Reusable template
+
+```md
+# Goal
+What change will someone be able to observe once this is done?
+
+# Context
+- Current state:
+- Key entry points:
+- Known evidence or errors:
+
+# Scope and off-limits
+- Allowed to read:
+- Allowed to modify:
+- Forbidden actions:
+- Must request authorization:
+
+# Verification
+- Fastest relevant check:
+- Full mechanical check:
+- Manual checkpoints:
+- What to keep on failure:
+
+# Delivery
+What are the changes, evidence, open risks, and next steps?
+```
+
+## Sources and further reading
+
+- [Anthropic: Claude Code best practices](https://code.claude.com/docs/en/best-practices): primary-source practices for exploration, planning, implementation, verification, and context management.
+- [OpenAI: Codex prompting](https://developers.openai.com/codex/prompting/): official guidance on giving a coding agent task, context, and verification requirements.
+- [OpenAI: AGENTS.md guide](https://developers.openai.com/codex/guides/agents-md): the official spec for project-level persistent instructions.
+- [Project checklist](../../ai-coding/project-checklist/) and [The instruction layer](../../agent-engineering/instruction-layer/): turning this page's four-box contract into mechanical gates and a project map.

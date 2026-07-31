@@ -1,0 +1,38 @@
+---
+title: "Agent Skills Tutorial Path: Build Triggerable, Verifiable Skills"
+description: Learn a Skill's triggers, inputs, steps, tool boundaries, and verification contract without packaging every prompt as a Skill.
+sidebar:
+  order: 0
+difficulty: beginner
+updated_from: "2026-07"
+author: LearnPrompt editorial team
+verified_at: "2026-07-31"
+reading_time: 7 minutes
+legacy_status: current
+---
+
+Repeating a workflow three times does not automatically mean it should become a Skill. First establish stable triggers, clear inputs and outputs, callable tools, and repeatable verification, then a Skill can reduce drift.
+
+## Start with the problem you have
+
+| What is happening now | Read first | Your first verifiable result |
+| --- | --- | --- |
+| You do not know which workflow is worth turning into a Skill | [What an Agent Skill actually is](./what-are-agent-skills/) | A decision to keep using a prompt or upgrade to a Skill |
+| You want to write your first SKILL.md | [Your first SKILL.md](./first-skill-md/) | A minimal Skill with triggers, steps, and verification |
+| A Skill keeps running when it should not | [Trigger rules and structure](./trigger-rules-and-structure/) | Checkable triggering and rejection boundaries |
+
+## A reusable learning route
+
+1. Collect tasks that repeat reliably instead of turning one-off instructions directly into an asset.
+2. State a Skill's inputs, tools, steps, failure states, and actions that require human confirmation.
+3. Use [checklist Skill design](./checklist-skill-design/) to leave a verification gate that can run again for its output.
+
+## What to keep after reading
+
+- A trigger contract that says when to run and when to refuse.
+- A minimal description of inputs, outputs, and external dependencies.
+- A check or receipt that does not rely only on the model's own claim.
+
+## Continue from here
+
+If your Skill needs external services, continue with [API integration Skill design](./api-integration-skill-design/). When Skills must connect into a pipeline, read [pipeline Skill design](./pipeline-skill-design/).

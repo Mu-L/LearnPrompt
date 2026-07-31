@@ -1,0 +1,410 @@
+---
+title: "The boundaries of Codex auto-review: Don't conflate GitHub PR review with approval reviewers as one switch"
+description: Using a real refund-window-review example, clearly separate the responsibilities, inputs, outputs, and limits of GitHub `@codex review` / Automatic reviews and `approvals_reviewer = "auto_review"`.
+sidebar:
+  order: 3
+difficulty: intermediate
+source_repo: alchaincyf/codex-orange-book
+source_url: https://github.com/alchaincyf/codex-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-11"
+reading_time: "19 minutes"
+research_path: research/articles/auto-review-boundaries
+showcase_path: research/articles/auto-review-boundaries/showcase
+showcase_status: verified
+quality_score: 100
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- |
+| Intermediate | 19 minutes | 2026-07-11 | LearnPrompt Editorial Team |
+
+You see a colleague leave `@codex review` in GitHub, and elsewhere in the permissions menu of local Codex or the desktop app you see “Approve for me for eligible approval requests.” Both use the word `review`, so many people naturally draw a dangerous conclusion: **as long as I turn on auto-review, Codex will both automatically approve requests for me and check code like a PR reviewer.**
+
+This is exactly the confusion the old short draft was most likely to create. As of **July 11, 2026**, official documentation describes at least two current product surfaces that are easy to mix up but have completely different responsibilities:
+
+1. **GitHub Codex code review**: code review for pull request diffs. It is triggered by `@codex review` or Automatic reviews, and outputs a standard code review hosted on the GitHub PR. It reports only P0/P1 issues and applies `AGENTS.md` review guidelines nearest to each changed file.
+2. **`approvals_reviewer = "auto_review"`**: an approval reviewer for local, IDE, or desktop use. It only reviews eligible approval requests; it is not PR code review, does not expand the sandbox, and does not automatically add GitHub review comments for you.
+
+The purpose of this tutorial is not to compare which is “more advanced,” but to separate the boundaries completely. We will first place the two paths in the same table using official primary documentation, then use a minimal JS PR fixture named `refund-window-review` to run a real read-only structured review locally with `codex-cli 0.142.2` and the model fixed to `gpt-5.5`. Finally, a deterministic gate will show that what can be reproduced locally is the review contract of **`diff + repo guidance + anchored finding`**, not the full lifecycle of a GitHub-hosted review.
+
+:::caution[Remember this most important sentence first]
+GitHub `@codex review` / Automatic reviews answer “does the PR diff contain a high-priority risk?”; `approvals_reviewer = "auto_review"` answers “at the approval boundary, who should review this eligible approval request for me?” Both are called review, but they are not controls on the same plane at all.
+:::
+
+## What you will be able to do after reading
+
+After reading, you should be able to do four things independently:
+
+1. When you see the term `auto review`, first ask whether it refers to the GitHub PR review surface or the local approval reviewer surface.
+2. Understand the inputs, outputs, triggers, and constraints of GitHub code review, and stop mistaking it for a simple local permission setting.
+3. Understand what `approvals_reviewer = "auto_review"` actually controls, and stop mistaking it for PR code review or a synonym for full access.
+4. Use a local, read-only, mechanically verifiable structured review Showcase to reproduce the minimum review contract of “real diff + repo guidance + anchored finding,” while explicitly disclosing that it is **not** GitHub-hosted `@codex review`.
+
+## The conclusion first: these two kinds of auto-review solve different problems
+
+If you remember only one table, remember this one:
+
+| Surface in front of you | Its actual input | Its actual output | What it can decide | What it explicitly cannot replace |
+| --- | --- | --- | --- | --- |
+| GitHub Codex code review | pull request diff + `AGENTS.md` review guidance in the repository | standard code review comments on the GitHub PR | whether to flag high-priority risks in the PR diff; comments focus on P0/P1; the closest `AGENTS.md` is applied to each changed file | It does not handle local sandbox approvals, is not `approvals_reviewer`, and is not a local CLI permission switch |
+| `approvals_reviewer = "auto_review"` | eligible approval requests under `on-request` or a granular approval policy | a reviewer subagent's decision on “whether this approval should pass” | who handles eligible approval prompts: `user` or `auto_review` | It is not PR code review; it does not automatically create GitHub comments; it does not expand the sandbox; it does not change actions already allowed inside the sandbox |
+
+It is important to make this mechanical distinction first because the two paths share only one word: `review`. From an engineering-interface perspective, though, they answer two entirely different questions:
+
+- The **PR review surface** asks: does this diff contain a serious issue, and how should a high-signal comment be left on the GitHub PR?
+- The **approval reviewer surface** asks: at the permission boundary, should this request be approved, and who should look at it first on the user's behalf?
+
+Once you collapse these two questions into “is auto-review smart enough,” you will make two errors in sequence:
+
+1. Assume that because local approvals have become more automatic, GitHub PRs will also gain review comments automatically.
+2. Assume the reviewer subagent will relax the sandbox too, and treat `auto_review` as invisible full access.
+
+Both inferences contradict the official documentation.
+
+## GitHub Codex code review: this is a PR-diff risk-discovery surface, not a local approval surface
+
+The official GitHub documentation describes this path very concretely from the start: Codex code review is used to add another high-signal review pass on a **GitHub pull request**. What it reviews is the **pull request diff**, and what it produces is a standard code review on GitHub, not a record of local command approval.
+
+This surface has four characteristics that cannot be omitted.
+
+### 1. It is intrinsically tied to GitHub PRs and Codex cloud
+
+The GitHub page makes the prerequisites explicit: first configure Codex cloud for the repository, then enable Code review in Codex settings. In other words, this is not a “local behavior switch you casually turn on,” but a capability tied to third-party GitHub integration, repository-level configuration, and a cloud execution surface.
+
+That alone is enough to separate it from `approvals_reviewer = "auto_review"`. The latter is about a local approval reviewer; the former is about a hosted review capability on GitHub PRs. They can coexist, but they are not the same layer of functionality.
+
+### 2. It is triggered by `@codex review` or Automatic reviews
+
+The GitHub page gives two typical entry points:
+
+- Explicitly write `@codex review` in a PR comment.
+- Enable Automatic reviews in Codex settings so every new PR automatically receives a review pass.
+
+This shows that its core is a **review workflow**: you trigger it on a GitHub PR, and Codex responds on that GitHub PR. It is not a static configuration item, much less a side effect that happens naturally after you set local review mode to `auto_review`.
+
+### 3. Comments are deliberately narrowed to P0/P1
+
+This is crucial because it defines the role of the GitHub review surface: it is not a PR-summary bot and not a comprehensive nit checker. The official page explicitly says Codex review on GitHub reports only **P0 and P1** issues, so comments stay focused on high-priority risks.
+
+This also explains why many local “structured reviews” cannot simply impersonate the GitHub surface. If you have a model return a JSON finding locally, even if it says `severity: "P1"`, it is only **simulating the shape of a high-signal finding**; it does not automatically inherit the comment semantics of the GitHub-hosted system.
+
+### 4. It applies the closest `AGENTS.md` to each changed file
+
+This is the GitHub surface's most easily underestimated and most valuable engineering detail. The official page does not merely say “Codex follows repository rules”; it says something more specific: Codex searches for `AGENTS.md` files in the repository and applies the **closest `AGENTS.md`** to each changed file.
+
+That means repo guidance on the GitHub review surface is not the abstract idea of “it will read rules if they exist,” but instead:
+
+- Rules are strongly tied to the **changed file**.
+- More specific `AGENTS.md` files can be placed in subdirectories.
+- The scope of review guidance uses **nearest-match in the file tree**.
+
+For teams, this design is much more useful than simply saying “follow our coding standards.” It naturally fits monorepos: payment modules, frontend component libraries, and infrastructure directories can each have more specific review priorities.
+
+The official page also gives a practical example: if you want Codex to treat documentation typos as high priority, put guidance such as “Treat typos in docs as P1.” in `AGENTS.md`. This again shows that the GitHub surface centers on **focus control for PR code review**, not approval of local permissions.
+
+:::note[Keep GitHub review separate from later cloud tasks]
+The GitHub page also notes that after Codex posts a review on a PR, you can leave `@codex fix the P1 issue` to have it open a cloud task to fix it. This follow-up action still belongs to the GitHub / cloud workflow; it is not the local CLI's approval reviewer.
+:::
+
+## `approvals_reviewer = "auto_review"`: this is an approval-reviewer surface, not a PR-code-review surface
+
+Now consider the other path that looks similar on the surface. `approvals_reviewer` appears in two pieces of official material:
+
+- The sandboxing page explains it in the configuration context of sandbox mode and approval policy.
+- The config reference defines it as a `user | auto_review` configuration option.
+
+The config reference's definition needs particularly close reading: `approvals_reviewer` determines **Who reviews eligible approval prompts**; its default is `user`, while `auto_review` uses a reviewer subagent. The official documentation immediately adds an easily overlooked sentence that dispels a common misunderstanding: **this setting does not change sandboxing and does not change review actions already allowed inside the sandbox.**
+
+In engineering terms, that means:
+
+- It is not the master switch for PR code review.
+- It does not turn deny into allow.
+- It does not make already allowed actions “more reviewed” just because the reviewer is now automatic.
+- It does not bring otherwise disallowed file, network, or side-effecting operations into scope.
+
+### 1. It works only at the approval boundary
+
+The sandboxing page provides the full context: common sandbox modes are `read-only`, `workspace-write`, and `danger-full-access`; common approval policies are `untrusted`, `on-request`, and `never`. Only then does it introduce `approvals_reviewer`: when approvals are interactive, you can choose `user` or `auto_review`.
+
+This means `approvals_reviewer` is not a mysterious standalone mode; it is a **role configuration within the approval system**. Without an approval boundary, it has no operating surface.
+
+### 2. It reviews eligible approval requests, not PR diffs
+
+The sandboxing page further fixes the meaning in place: automatic review does not change the sandbox boundary. It is merely a reviewer choice at the approval boundary, handling examples such as:
+
+- sandbox escalation
+- blocked network access
+- side-effecting tool calls that still need approval
+
+None of these is a GitHub PR diff. They are **requests at the permission boundary**. So if your question is “does the logic changed by this PR have a bug?”, `approvals_reviewer = "auto_review"` is not the primary answer at all; if your question is “who should review this boundary-crossing operation first for me?”, that is when it is relevant.
+
+### 3. Full access cannot be inferred from `auto_review`, either
+
+The sandboxing page even spells out the more easily confused combination: **Full access** means `sandbox_mode = "danger-full-access"` plus `approval_policy = "never"`. The low-risk local automation preset, by contrast, is `workspace-write` plus `on-request`, after which you decide whether `approvals_reviewer` should be `user` or `auto_review`.
+
+This relationship is especially worth remembering because it tells you directly:
+
+- `auto_review` is not shorthand for `danger-full-access`.
+- `auto_review` is not an alias for `never`.
+- Reviewer automation only answers “who handles the eligible approval request,” not “where is the boundary?”
+
+If an action is already allowed in the current sandbox, the official page explicitly says it **runs directly**; setting `approvals_reviewer = "auto_review"` will not add an extra review pass. Conversely, if an action exceeds the current sandbox, this reviewer only decides at the approval boundary; it does not secretly broaden the sandbox.
+
+## Why these two surfaces are especially easy to confuse
+
+The confusion is not because users are careless; the product surface really does reuse words such as `review`, `approval`, and `automatic`. Three kinds of mix-up are especially common.
+
+### Mix-up one: treating “Automatic reviews” and “Approve for me” as the same thing
+
+The error comes from both phrases containing “automatic.” But in reality:
+
+- **Automatic reviews** means each newly created GitHub PR automatically receives a code review.
+- **Approve for me for eligible approval requests** means that at the local approval boundary, a reviewer agent first examines an eligible request on your behalf.
+
+One targets PR diffs; the other targets permission requests. Their input objects are not even the same kind of thing.
+
+### Mix-up two: interpreting `review` to mean “it can review anything code-related”
+
+`review` on the GitHub page means code review; reviewer in the config reference means approval reviewer. Both can “make a judgment,” but one is about **code risk** and the other is about the **permission boundary**. The same English word represents two system roles here.
+
+### Mix-up three: treating local structured review as a complete substitute for the GitHub surface
+
+This is also the misleading impression this article's Showcase most needs to avoid. You can absolutely run a read-only structured review locally: have the model read a staged diff, consult repo guidance, and return an anchored finding. That works well for teaching the core structure of the “review contract.”
+
+But you cannot therefore say:
+
+- “I have equivalently reproduced GitHub `@codex review`.”
+- “The behavior of Automatic reviews has been proven locally.”
+- “I enabled `auto_review` locally, so this is GitHub review.”
+
+At most, a local structured review proves this: **in this repo, for this diff, with this prompt and this model version, Codex can produce a finding that satisfies the changed-line contract.** That remains an entire external system away from the GitHub-hosted surface.
+
+## Decide with one question: which surface do you actually need?
+
+The most useful way to decide is not to memorize configuration options, but to say your real question out loud first. The table below can be used directly with team members.
+
+| Real question | Surface to look at first | Why |
+| --- | --- | --- |
+| “I want every new PR to automatically receive a review of high-priority risks.” | GitHub Codex code review | This is a PR-diff-review problem; the keywords are PR, comment, P0/P1, and Automatic reviews |
+| “When I use local workspace-write + on-request, I want a reviewer agent to examine eligible approval requests first.” | `approvals_reviewer = "auto_review"` | This is an approval-boundary problem; the keywords are eligible approval request, reviewer, and sandbox |
+| “In local teaching or an experiment, I want to reproduce the minimum contract of PR review without touching GitHub external state.” | Local read-only structured review | This is not the official hosted surface; it is a pedagogical reproduction of `diff + guidance + finding` |
+| “I want the automatic reviewer to relax local file or network boundaries while it is at it.” | Neither | The boundary should be determined by the sandbox / permission profile; `approvals_reviewer` will not expand the sandbox for you |
+
+If you can remember only one mnemonic, remember this:
+
+> When you see a PR diff, think GitHub code review; when you see an approval boundary, think `approvals_reviewer`; when you see a staged-diff teaching experiment, acknowledge that you are doing a local contract reproduction, not hosted GitHub review.
+
+## Showcase: why the `refund-window-review` example makes the boundary clear
+
+To make this verifiable, this article does not use the LearnPrompt main repository for a vague demonstration. Instead, it constructs a minimal JS PR fixture: `refund-window-review`. Its design goal is deliberately restrained and does only three things:
+
+1. Provide a **real staged diff**, rather than an overly broad task such as “scan the whole repository.”
+2. Provide **repo guidance**, with a top-level `AGENTS.md` explicitly requiring “report only changed-line regressions,” treating refund-boundary bugs as P1, and requiring anchoring to a changed line on the right side.
+3. Provide a **real behavioral flaw**, not a style issue or an abstract suggestion.
+
+The function's baseline logic is simple:
+
+```js
+const elapsedMs = nowMs - deliveredAtMs;
+return elapsedMs >= 0 && elapsedMs <= REFUND_WINDOW_MS;
+```
+
+Here, `elapsedMs >= 0` rejects future timestamps. If `deliveredAt` is in the future, `nowMs - deliveredAtMs` is negative; without that guard, a very typical time-comparison flaw appears: **a negative elapsed value still satisfies `<= REFUND_WINDOW_MS`.**
+
+And that is exactly what the staged diff in the PR fixture does:
+
+```diff
+-  return elapsedMs >= 0 && elapsedMs <= REFUND_WINDOW_MS;
++  return elapsedMs <= REFUND_WINDOW_MS;
+```
+
+This change is dangerous because it looks like a small refactor that “simplifies the condition,” but it actually includes “future delivery times” in the refundable window. As a result, the following input has incorrect behavior:
+
+```js
+isRefundEligible({
+  deliveredAt: "2026-08-01T00:00:00.000Z",
+  now: "2026-07-11T00:00:00.000Z"
+});
+```
+
+In our actual deterministic behavior reproduction, this call returns `true`. In other words, the order has clearly not yet been delivered, but it is already considered refund-eligible.
+
+More importantly, the existing tests in this fixture **still all pass**. They cover only “true within 30 days,” “false outside 30 days,” and “invalid date throws,” not a future-timestamp case. In other words, this is precisely the type of issue code review is well suited to find: a real behavioral regression exists, but the existing tests have not pinned it down.
+
+:::note[Why this example is suitable for teaching boundaries]
+It is small enough to keep the changed-line anchor stable, yet real enough to be a genuine business-rule regression rather than an abstract style dispute. You can therefore see very clearly that the PR review surface cares about “what behavioral risk this diff introduces,” while the approval reviewer surface is not concerned with that category of question at all.
+:::
+
+## Real read-only structured review: what can be reproduced locally is the “contract,” not GitHub-hosted execution
+
+Now we reach the step most prone to misunderstanding. We did run `codex exec` for real locally, but it was a **local read-only structured review**, not GitHub `@codex review`.
+
+The constraints of this real run were:
+
+- CLI: `codex-cli 0.142.2`
+- Model: `gpt-5.5`
+- Sandbox: `read-only`
+- Approval: `-a never`
+- Other key parameters: `--ephemeral`, `--ignore-user-config`, `--ignore-rules`, `--json`, `--output-schema`, `--output-last-message`
+
+These parameters are not decoration; each maps to a boundary this article needs to demonstrate:
+
+- `read-only`: ensures the review run itself does not modify the repository.
+- `-a never`: lets it complete non-interactively within the current boundary, without interrupting for manual approval.
+- `--ephemeral`: does not persist rollout files to disk.
+- `--ignore-user-config` / `--ignore-rules`: keeps personal machine configuration and `.rules` files out of this run, so they do not contaminate the minimum-contract experiment.
+- `--json` + `--output-schema` + `--output-last-message`: compresses the final result into a structured finding rather than loose natural language.
+
+At the same time, we deliberately wrote **raw JSONL, stderr, and the final JSON** outside the worktree first. The research package freezes only the redacted minimal finding. This matters because the skill contract explicitly requires that a live reviewer's output not flow into the same worktree, and that execution traces such as local absolute paths, item IDs, and shell paths not be included in public artifacts.
+
+The final frozen finding is:
+
+| Field | Value |
+| --- | --- |
+| severity | `P1` |
+| file | `src/refundPolicy.js` |
+| line | `15` |
+| title | `Future deliveries are now refund-eligible` |
+| Core issue | A future `deliveredAt` makes `elapsedMs` negative, but the changed line still judges it as `<= REFUND_WINDOW_MS`, incorrectly returning `true` |
+
+This result has teaching value not merely because “the model spotted it,” but because it satisfies three conditions at once:
+
+1. **A real diff exists**: this is not an unfounded scan of a repository.
+2. **Repo guidance exists**: the fixture's top-level `AGENTS.md` requires reporting only changed-line regressions and treats refund-boundary bugs as P1.
+3. **An anchored finding exists**: it points to `src/refundPolicy.js:15`, not a vague “there may be a boundary issue here.”
+
+![Boundary flow diagram for local structured review: from staged diff to candidate finding, then mechanical verification and a human/CI decision](/images/articles/auto-review-boundaries/review-boundary-flow.svg)
+*Caption: This local path reproduces the contract among a staged diff, repo guidance, a candidate finding, and a mechanical gate; the GitHub PR-comment lifecycle, Automatic reviews triggers, and cloud follow-up are not part of this diagram.*
+
+If you describe this step as “I have reproduced GitHub `@codex review` locally,” you have crossed the boundary. A more accurate statement is:
+
+> In local read-only `codex exec`, we reproduced the minimum contract of the GitHub review surface that is most valuable for teaching: `diff + repo guidance + anchored finding`.
+
+This sentence neither diminishes the value of the local experiment nor packages it as a hosted system that never occurred.
+
+## Deterministic gate: why a real finding still needs another mechanical gate
+
+Many teams stop here: the model gives a good finding, so they declare the review a success. That is not enough. For a tutorial, what matters is not “does the model sound right this time?” but **can later readers mechanically verify that we did not cherry-pick flattering language to publish.**
+
+For that reason, `refund-window-review` adds a deterministic gate that checks four things:
+
+1. Whether the finding hits a changed file.
+2. Whether the finding's line hits a **changed line on the right side**.
+3. Whether the finding explicitly names the specific flaw of a **future timestamp / negative elapsed** value.
+4. Whether the finding has a severity and a concrete reproduction.
+
+The real `real-finding.json` passes this gate:
+
+```text
+PASS anchored finding: src/refundPolicy.js:15
+PASS severity: P1
+PASS future timestamp scenario named
+PASS negative elapsed behavior named
+PASS reproduction present
+```
+
+We then feed it a deliberately fabricated negative example: it also says “future timestamp” and “negative elapsed,” but anchors the line to `src/refundPolicy.js:11`, which is **not a changed line on the right side of the diff**. This fabricated finding reliably fails with exit 3:
+
+```text
+FAIL finding is not anchored to a changed right-side line: src/refundPolicy.js:11
+```
+
+This step matters greatly. It tells readers that we are not presenting “the model sounds convincing” but a **mechanical comparison between model output and diff evidence**. Only after passing this gate can a structured review count as an auditable Showcase rather than a marketing screenshot of success.
+
+## What this Showcase explicitly does not prove
+
+The more we want to make the boundaries clear, the more explicitly we must state what was not proven. This Showcase **does not** prove any of the following:
+
+- It did not trigger a real GitHub `@codex review`.
+- It did not enable Automatic reviews.
+- It did not create a PR or write any external state.
+- It did not prove that the comment threading, UI behavior, and cloud-task follow-up of the GitHub-hosted surface are all fully equivalent to local structured review.
+- It did not prove that `approvals_reviewer = "auto_review"` performs PR code review for you.
+- It did not prove that `approvals_reviewer = "auto_review"` expands the sandbox.
+
+This level of detail is necessary because overstatement that is “only a little off” is the most dangerous. For example, the following sentence is wrong:
+
+> I have already had Codex review this diff automatically locally, so enabling Automatic reviews on GitHub is more or less the same effect.
+
+The genuinely rigorous statement is:
+
+> I reproduced locally the minimum review contract of diff, repo guidance, and an anchored finding; GitHub Automatic reviews is another hosted surface and must still follow the official integration flow and a real PR.
+
+## When not to rely on this auto-review setup to solve a problem
+
+Even after the boundaries are separated, that does not mean every problem is suitable to hand to either surface. For the following types of problems, neither kind of `auto-review` should be packaged as a universal answer.
+
+### 1. Product direction, copy tone, and brand judgment
+
+GitHub PR review excels at high-signal engineering risk, not judging whether a product direction is correct. `approvals_reviewer` is even less a content reviewer; it only decides whether an approval request should pass. Send product-direction questions to them and you will only get a review that misses the point.
+
+### 2. Experience problems that need real external state to confirm
+
+For example: whether a checkout flow truly works end to end, whether a payment callback intermittently fails in production, or whether a browser extension has an interaction bug under a user's real account. Without real external state, PR-diff review can at most identify risk; it cannot replace end-to-end verification.
+
+### 3. The permission boundary itself is configured incorrectly
+
+If your real local problem is that `.env` should not be readable, the network should not be on by default, or certain side-effecting commands must prompt a person, then what you should change is the sandbox, permission profile, approval policy, and rules—not expect a reviewer subagent to substitute for the boundary by being “a little smarter.”
+
+### 4. Trying to extrapolate one successful run into a model capability ranking
+
+This article's Showcase deliberately avoids doing that. It proves an engineering contract, not that “gpt-5.5 is better than anyone else at review.” Change the model, repository, guidance, or diff and the result may all change. What a tutorial should teach is interfaces and evidence, not a leaderboard.
+
+## How to configure this for a team: choose the surface first, then the evidence chain
+
+If you plan to bring these boundaries back to your team, the safest approach is not to enable features first, but to write the evidence chain clearly first.
+
+### For the GitHub code-review surface
+
+At minimum, determine:
+
+1. Which repositories have Codex cloud configured.
+2. Which PR types merit Automatic reviews.
+3. Whether your `AGENTS.md` review guidelines are actually organized by changed file rather than being a single generic rule set.
+4. Whether the team accepts the review style in which GitHub reports only P0/P1.
+
+### For the approval-reviewer surface
+
+At minimum, determine:
+
+1. What the current default sandbox is: `read-only`, `workspace-write`, or `danger-full-access`.
+2. What the approval policy is: `untrusted`, `on-request`, or `never`.
+3. Which requests count as eligible approval requests and are worth handing to `auto_review` rather than the user.
+4. Which actions should not be solved by loosening the sandbox even if the reviewer considers them acceptable.
+
+### For local teaching or integration experiments
+
+At minimum, determine:
+
+1. Always write raw outputs outside the worktree first.
+2. Keep only the minimum redacted finding, gate output, and necessary behavior reproduction in the research package.
+3. Every structured review must clearly state that it reproduces a contract, not the full lifecycle of the GitHub-hosted surface.
+
+## Exercise: turn your team's “auto-review” ambiguity into a routing table
+
+Find a request your team has actually said in the last three months, such as:
+
+- “Let's turn on auto-review.”
+- “Have Codex automatically look at this PR.”
+- “I don't want to click approve myself every time.”
+
+Then rewrite it into the following table:
+
+| Original statement | What input is actually wanted | Desired output | Corresponding surface |
+| --- | --- | --- | --- |
+| Let's turn on auto-review | A new PR's diff | GitHub review comments | GitHub code review |
+| I don't want to click approve myself every time | An eligible approval request | A reviewer examines the approval request first | `approvals_reviewer = "auto_review"` |
+
+The acceptance criterion is simple: every row must clearly answer, “is this a PR-review problem or an approval-boundary problem?” If you still cannot answer, your team is still using the term `auto-review` to refer to two mixed surfaces.
+
+## Sources and further reading
+
+- [Codex code review in GitHub](https://learn.chatgpt.com/docs/third-party/github) (official primary documentation: `@codex review`, Automatic reviews, P0/P1, closest `AGENTS.md`)
+- [Sandbox](https://learn.chatgpt.com/docs/sandboxing) (official primary documentation: sandbox modes, approval policies, and the relationship between `approvals_reviewer` and the approval boundary)
+- [Configuration Reference](https://learn.chatgpt.com/docs/config-file/config-reference) (official primary documentation: the precise definition of `approvals_reviewer = user | auto_review`, and the constraint that it “does not change sandboxing”)
+- [Codex Orange Book](https://github.com/alchaincyf/codex-orange-book) (Chinese secondary topic map, used only for topic selection and terminology orientation)
+
+Current product behavior is based on three official documents checked on **2026-07-11**. Codex Orange Book is retained only as a Chinese secondary topic map with attribution; its repository page shows version `v2.0.1 (May 2026)`, and the README's `License` section publicly declares [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). This article's structure, argument, Showcase, and teaching diagram have all been independently remade; the public page retains only the auditable source section at the bottom. Repository assets and original teaching diagrams are used and shared under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) in the repository root `LICENSE`.

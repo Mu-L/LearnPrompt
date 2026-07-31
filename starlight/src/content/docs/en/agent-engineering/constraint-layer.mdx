@@ -1,0 +1,220 @@
+---
+title: "Constraint Layer: Turn “What Not to Do” from a Soft Reminder into an Executable Boundary"
+description: Use two mechanisms—pre-execution decisions and execution-time interception—to turn “do not touch secrets, do not push” from a soft reminder in CLAUDE.md into a hard boundary the system enforces and can verify.
+sidebar:
+  order: 3
+difficulty: intermediate
+updated_from: "2026-05"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-11"
+reading_time: 13 minutes
+research_path: research/articles/constraint-layer
+showcase_path: research/articles/constraint-layer/showcase/constraint-gate
+showcase_status: verified
+quality_score: 95
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Advanced | 13 minutes | 2026-07-11 | LearnPrompt Editorial Team |
+
+You clearly write “do not touch config, do not push, do not delete the production database” in CLAUDE.md or AGENTS.md, yet the Agent still changes a configuration file in one turn. You look back, and that sentence is plainly there.
+
+Most people’s next move is to strengthen the wording and add another sentence: “be sure to be careful.” But this sentence never had any interception capability to begin with. A written “do not” is only a soft reminder: the model may ignore it; even if it complies in this turn, you have no way to stop it before the next action happens, and only discover afterward that the file was changed. What the constraint layer really needs to do is place a decision point for that “do not” on the execution path, so the system decides before an action executes or intercepts it while it executes, rather than hoping the model restrains itself.
+
+## What you will be able to do after reading
+
+You will learn how to turn any “what not to do” into an enforceable, verifiable boundary:
+
+1. Distinguish whether a constraint is currently a soft reminder or a hard boundary.
+2. Use pre-execution decisions to block prohibited actions while allowing legitimate actions.
+3. Use an operating-system sandbox as an execution-time backstop without depending on the model’s judgment.
+4. Explain what Claude Code permissions and hooks are, and what Codex sandboxes and approvals are, without mixing them into one set of terms.
+
+Finally, you will see the genuinely different outcomes for the same set of allowed and prohibited actions under three constraints: a soft reminder, a deterministic gate, and an operating-system sandbox.
+
+![When only AGENTS.md text reminds it, the prohibited action on the upper path is allowed; the same action on the lower path is denied by three hard boundaries—path and command permissions, a pre-execution hook, and an operating-system sandbox—while legitimate actions pass through the same boundary set](/images/articles/constraint-layer/soft-reminder-vs-hard-boundary.svg)
+*Caption: The same prohibited action is executed and cannot be verified when there is only a text reminder; when connected to any one of a deny rule, a pre-execution hook, or a sandbox, it is blocked, while legitimate actions still pass through the same hard boundaries.*
+
+:::note[This is an operating model]
+The two-part distinction between “pre-execution decisions” and “execution-time interception,” as well as the division of labor between the constraint layer and the other four layers, is LearnPrompt’s operational synthesis of official mechanisms for auditing and teaching convenience, not official terminology from any one product. For product behavior, return to primary official documentation and verify with local CLIs; see the date at the end.
+:::
+
+## Start with a failure: soft constraints cannot stop prohibited actions
+
+Suppose your project has an AGENTS.md that says plainly:
+
+```text
+- 不要修改 config/ 下的任何配置文件。
+- 不要执行 git push、rm -rf、npm publish。
+- 只在 docs/ 下写文档。
+```
+
+Now an action needs to modify `config/app.env`. Without any enforcement mechanism, an ordinary command can change it:
+
+```text
+$ sh -c 'echo TAMPERED >> config/app.env'
+exit=0
+# 执行后 config/app.env 尾部多了一行 TAMPERED
+```
+
+Exit code 0; the file changed; and those three lines in AGENTS.md did not block a single character. This reveals the two essential problems with soft constraints: they can be ignored because no decision point reads and enforces them; and they cannot be verified because you can only inspect the file afterward to learn that the boundary was crossed. Claude Code’s official documentation likewise positions CLAUDE.md and memory as context rather than enforcement configuration—documentation expresses intent, while enforcement must be handed to another mechanism.
+
+Adding ten more sentences of “be sure to be careful” cannot change that. What you need is a place that truly says “no” before or during the action’s execution.
+
+## The constraint layer enforces; it does not remind
+
+The constraint layer answers only one question: what must never be done. Its boundary with the instruction layer is clear—the instruction layer explains “how work should be done,” while the constraint layer enforces “which boundaries cannot be crossed.” For a constraint to take effect, its artifact must connect to a decision point on the execution path, rather than remain in natural language.
+
+There are two kinds of decision points, belonging to different mechanisms in different products. Distinguishing them is a prerequisite for writing correct constraint configurations.
+
+- One kind is a pre-execution decision: before a tool call actually happens, deterministic logic decides whether to allow it.
+- The other kind is execution-time interception: the operating system directly rejects out-of-bound operations at the system-call level.
+
+The table below is the smallest checklist for auditing a constraint: first ask which kind of decision point it reaches, then see whether legitimate actions can still pass.
+
+| Constraint landing point | Who blocks it | When it blocks | Typical mechanism |
+| --- | --- | --- | --- |
+| Soft reminder (no decision point) | Nobody | Never | CLAUDE.md / AGENTS.md text |
+| Pre-execution decision | Tool-layer rule or hook | Before an action executes | Claude Code permissions, PreToolUse hook |
+| Execution-time interception | Operating system | During a system call | Codex sandbox (seatbelt, etc.) |
+
+## Two kinds of hard boundary: pre-execution decisions and execution-time interception
+
+### Pre-execution decisions: saying “no” before an action happens
+
+Claude Code’s permissions system is a pre-execution decision layer. It has three kinds of rule: `deny`, `ask`, and `allow`; their priority is `deny > ask > allow`, meaning that a matching `deny` blocks immediately and overrides any `allow`. Rules are written in the form `Tool(specifier)`:
+
+```json
+{
+  "permissions": {
+    "deny": ["Read(./.env)", "Read(./.env.*)", "Bash(rm -rf *)"],
+    "ask": ["Bash(curl *)"],
+    "allow": ["Bash(npm run test:*)", "Read(./config.json)"]
+  }
+}
+```
+
+A more flexible pre-execution decision than rules is a `PreToolUse` hook. It fires before every tool call executes and can block the entire call: return `hookSpecificOutput.permissionDecision: "deny"` (with a `permissionDecisionReason`), or, more directly, block with exit code 2, with stderr returned to the model as the reason. You write the logic; the decision is deterministic—the same input always gets the same allow/deny result.
+
+What these two share is this: the decision happens before the action executes, so a rejected action never starts running at all.
+
+### Execution-time interception: let the operating system provide the backstop
+
+Codex takes another route—an operating-system-level sandbox. Its `sandbox_mode` has three levels:
+
+- `read-only`: read-only; all writes and network access are prohibited.
+- `workspace-write`: the workspace is writable; `/tmp` and `$TMPDIR` are additionally writable roots by default, and the network is off by default.
+- `danger-full-access`: unrestricted.
+
+It is paired with an `approval_policy` that decides which approval prompts may appear. The current configuration supports both the three strings `untrusted` / `on-request` / `never` and a `{ granular = { ... } }` object, which individually allows or automatically rejects categories of prompts including `sandbox_approval`, `rules`, `mcp_elicitations`, `request_permissions`, and `skill_approval`; `on-failure` is deprecated. Approval policy and sandboxing are two axes: real filesystem interception does not rely on model judgment, but lets the kernel (seatbelt on macOS) reject out-of-bound writes at the system-call level.
+
+One counterintuitive detail is worth remembering: `workspace-write` makes `$TMPDIR` writable by default as well. Therefore, “writing to a temporary directory counts as out of bounds and will definitely be blocked” is false. The actual scope of a boundary must be based on configuration and measurement, not intuition—this is also why the Showcase below deliberately retains a verification for it.
+
+## Do not mix mechanisms from different products into one set
+
+The easiest pitfall in the constraint layer is treating terminology from different products as the same thing. They all solve “blocking prohibited actions,” but their mechanisms, levels, and writable scope are completely different:
+
+- Claude Code’s `deny` is a tool-layer pre-execution decision that decides whether this tool call is allowed; it is not operating-system-level isolation.
+- Codex’s `read-only` is an operating-system sandbox that blocks system calls, regardless of whether the model is willing to cooperate.
+- Treating Claude Code’s `deny` as Codex’s `read-only`, or vice versa, produces configuration that neither works nor avoids creating a false sense of security.
+
+In practice, the two kinds of mechanism are complementary: pre-execution decisions precisely match paths and commands and allow legitimate actions; execution-time sandboxes provide the backstop when decisions are bypassed or do not cover a case. One layer makes decisions, and one provides isolation; stacked together, they form defense in depth. The primary-documentation links at the end correspond to these two mechanisms respectively; when configuring them, write according to each product’s own documentation and do not apply them across products.
+
+## The division of labor between the constraint layer and the other four layers
+
+The constraint layer is important, but it only answers “what must never be done.” Without distinguishing this boundary, you will force problems that belong elsewhere into deny rules:
+
+- The instruction layer answers “how work should be done.” Writing “do not touch secrets” in an instruction is only a soft reminder; actually blocking it requires a deny rule, hook, or sandbox.
+- The capability layer answers “what can actually be done.” Giving one fewer high-risk tool reduces the blast radius of failure at the source; constraints draw boundaries on capabilities that have already been provided.
+- The state layer answers “what to remember in the next turn.” Rejected actions and their reasons should remain as evidence for auditing and recovery, rather than being forgotten after refusal.
+- The orchestration layer answers “who accepts the result, which step a failure returns to, and when to stop.” Escalating approval to a human is where constraints meet orchestration.
+
+A simple test: if adding a precise path or command rule can block a prohibited action, that is work for the constraint layer; if the problem is a missing tool, lost state, or an uncontrolled process, solve it in another layer.
+
+## Showcase: the same action set, three kinds of constraint
+
+To keep “soft reminder vs. hard boundary” from remaining a slogan, this article includes a minimal repository with no network dependency. For the same set of allowed and prohibited actions, it preserves the actual outcomes under three kinds of constraint. It never touches real secrets, pushes, or deploys; prohibited commands are only decided upon and never executed. See [Research and Showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/constraint-layer/showcase/constraint-gate) for the complete directory, commands, and redacted output.
+
+Among the same five candidate actions, allowed and prohibited actions are mixed together: legitimate actions write `docs/notes.md` and read `tracked.txt`; prohibited actions modify `config/app.env` (a placeholder configuration, not a real secret), `git push origin main`, and `rm -rf build`.
+
+First, the soft reminder. As seen above, without a decision point, an ordinary command changes the prohibited file with exit code 0. Text cannot block it or leave evidence.
+
+Second, the deterministic gate. It turns the shape of a pre-execution decision into a minimal model: it reads policy (deny paths, deny commands, and an allowlist), then decides on the five actions one by one. Actual results on macOS with Node v24.11.0 on 2026-07-11:
+
+```text
+$ node ../scripts/policy-gate.mjs policy.json actions.json
+ALLOW 写发布说明 docs/notes.md — 写入路径在 allow 白名单内：docs/notes.md
+ALLOW 读追踪文件 tracked.txt — 读取未受限：tracked.txt
+DENY  改配置密钥 config/app.env — 写入路径命中 deny 规则：config/app.env
+DENY  推送到远端 git push origin main — 命令命中 deny 规则：git push origin main
+DENY  删除目录 rm -rf build — 命令命中 deny 规则：rm -rf build
+summary: 2/5 allowed, 3 denied
+exit=2
+```
+
+The legitimate write and read receive ALLOW; the prohibited write and two prohibited commands receive DENY; exit code 2—exactly corresponding to a PreToolUse hook using exit 2 to block one tool call. Crucially, the decision happens before any action executes, so the three rejected actions never ran.
+
+Third, the operating-system sandbox. Use `codex sandbox` (read-only by default, macOS seatbelt) to backstop the same type of actions:
+
+```text
+$ codex sandbox -c sandbox_mode='"read-only"' -- sh -c 'echo hi > sandbox-blocked.txt'
+sh: sandbox-blocked.txt: Operation not permitted
+exit=1
+$ codex sandbox -c sandbox_mode='"read-only"' -- cat tracked.txt
+这是一份被追踪的只读示例文件。
+exit=0
+# sandbox-blocked.txt 从未被创建
+```
+
+The read-only sandbox directly rejects the write and allows the read; the rejected file is never created. This layer does not ask whether the model is willing—it relies on the kernel.
+
+### What this Showcase demonstrates
+
+- The same sentence, “do not touch configuration, do not push,” cannot block anything when written in AGENTS.md; only when it reaches a deny decision or sandbox can it block.
+- Constraints can be implemented as a pre-execution decision (the gate’s exit code 2) or execution-time interception (the sandbox rejects writes); neither depends on model self-restraint.
+- Legitimate actions pass normally under hard boundaries, showing that the tightening targets prohibited actions rather than locking the Agent down as well.
+
+### What it does not demonstrate
+
+- `policy-gate.mjs` is a minimal reproducible model that implements the shape of Claude Code deny rules and PreToolUse pre-execution refusal; it is not these products themselves. For real products, matching semantics, scope merging, and priorities follow official documentation.
+- The seatbelt in the third section is macOS-specific; sandbox backends differ on Linux and in containers. This demonstrates the behavior of Codex `sandbox_mode`, not identical platform details everywhere.
+- Passing one decision or interception does not mean policy design is correct: if an allowlist is too broad or a deny rule misses a category of paths, the gate still allows it. Constraints must be audited together with capability, state, and orchestration.
+
+## When you should not use the constraint layer to solve a problem
+
+The constraint layer is not a master key. In the following situations, do not rush to add deny rules:
+
+- The failure comes from a missing tool or an unwritable path. This belongs to the capability layer; no number of denies can conjure a command that does not exist.
+- What you need is to remember what was rejected last time. This belongs to the state layer; constraints block, not remember.
+- What you need is escalation to a human after failure. This belongs to stop and approval design in the orchestration layer; constraints only provide the trigger point.
+- The requirement itself is legitimate and necessary. Do not deny it wholesale; instead, narrow the boundary to a precise path or command allowlist and allow legitimate actions—the tightening is for the prohibited surface, not for keeping people out as well.
+
+Also remember: declaration is not enforcement. A deny written in JSON or TOML only takes effect when an executor actually reads and enforces it; if `policy-gate.mjs` is never called, prohibited actions still execute. A boundary gets its power from being connected to the execution path, not from being written down.
+
+## Exercise: find a decision point for one “do not”
+
+Find one constraint you are using (for example, “do not touch production configuration”), plus an action it recently failed to control, and fill out this table:
+
+```yaml
+Constraint text:     Where it is currently written (CLAUDE.md / AGENTS.md / none)
+Decision point:      Whether a place reads and enforces it before or during execution
+Landing-point type:  Soft reminder / pre-execution decision / execution-time interception
+Legitimate actions:  Which valid actions must still be allowed after tightening
+Verification method: How to prove with one command or one run that it really blocks
+```
+
+If you cannot answer any line with “it reaches a real decision point,” that signals the constraint remains a soft reminder. Connect only the weakest one to a deny rule, PreToolUse hook, or sandbox, then rerun the same action and observe whether the outcome changes from “only discovered it was changed afterward” to “rejected before execution, with a non-zero exit code.”
+
+Completion criteria: this constraint can point to a specific decision point; the prohibited action is blocked with a non-zero exit code when rerun; at least one legitimate action still passes. If the only explanation is still “I reminded it,” this tightening is not complete yet.
+
+## Sources and further reading
+
+- [Claude Code official documentation: Settings and permissions (deny/ask/allow, permission modes)](https://code.claude.com/docs/en/settings)
+- [Claude Code official documentation: Hooks (PreToolUse, permissionDecision, exit 2)](https://code.claude.com/docs/en/hooks)
+- [OpenAI Codex official configuration reference (sandbox_mode, approval_policy)](https://learn.chatgpt.com/docs/config-file/config-reference)
+- [Harness Engineering Orange Book](https://github.com/alchaincyf/harness-engineering-orange-book)
+- [This article’s research package and runnable Showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/constraint-layer)
+
+The first three are official primary sources supporting all current product behavior in this article, and were verified with local Claude Code 2.1.206 and codex-cli 0.142.2 on 2026-07-11. The Orange Book serves as a Chinese thematic map (a secondary source) that helped confirm how to organize the layered narrative; its repository is an educational sharing resource that requires attribution, so this article retains the link and attribution and has not copied any of its images or continuous passages. The distinction between pre-execution decisions and execution-time interception, and the division of labor between the constraint layer and the other four layers, are LearnPrompt’s operational synthesis of official mechanisms, not a uniform industry standard; the Showcase in this article has been reorganized and rechecked.

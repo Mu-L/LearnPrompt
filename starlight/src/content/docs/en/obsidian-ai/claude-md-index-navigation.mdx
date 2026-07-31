@@ -1,0 +1,272 @@
+---
+title: "How CLAUDE.md + index.md Limit an Agent's Reading Scope: Replace Whole-Vault Recursion with a Routing Budget"
+description: "Learn how to combine Claude Code's instruction-loading mechanism with project-authored index.md files into an auditable routing budget, so an Agent reads only the necessary entrypoints instead of recursively scanning the entire vault."
+sidebar:
+  order: 3
+difficulty: intermediate
+source_repo: alchaincyf/obsidian-ai-orange-book
+source_url: https://github.com/alchaincyf/obsidian-ai-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-12"
+reading_time: 16 minutes
+research_path: research/articles/claude-md-index-navigation
+showcase_path: research/articles/claude-md-index-navigation/showcase/index-routing-budget
+showcase_status: verified
+quality_score: 100
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Intermediate | 16 minutes | 2026-07-12 | LearnPrompt Editorial Team |
+
+After connecting an Obsidian vault to an Agent, the easiest instruction to write is: “Understand the whole knowledge base first, then answer my question.” That sentence feels natural to humans, but it is expensive for an Agent. It turns a specific task into open-ended discovery: What files are in the root directory? Which ones are projects? Which ones are reference materials? Which is the current entrypoint? Without an explicit route, the Agent can only fill in that background through search, directory traversal, and guessing.
+
+The value of `CLAUDE.md + index.md` is not a mysterious filename. It is that it changes “understand the whole vault” into a finite set of navigation questions: which rule to read first, which area the root index assigns to the task, which canonical target the area index exposes, and how to cite and verify the result after reading. What you limit is the **reading scope**, not the model's capability.
+
+First, make the boundary clear: what Claude Code officially supports is an instruction surface such as `CLAUDE.md`. An ordinary `index.md` is not a Claude Code feature, and it does not enter the context automatically. It participates in routing only when `CLAUDE.md`, the task prompt, or your workflow explicitly requires it to be read.
+
+## What you will be able to do after reading
+
+After reading, you should be able to do four things:
+
+1. Explain the product boundary between `CLAUDE.md`, `@path` imports, subdirectory instructions, and ordinary `index.md` files.
+2. Write a vault routing rule that says “read the root index first, then one area index, then the canonical target.”
+3. Design index-row fields that do not turn into a prose dump: route key, scope/purpose, canonical entrypoint, owner, verified date, and fallback.
+4. Use deterministic gates to check for missing routes, duplicate routes, recursive scans, stale targets, and private targets instead of trusting the model's own success message.
+
+![The task first passes through CLAUDE.md routing rules, then through the root index and an area index to a canonical target; a valid path reads only 10 synthetic files, while 61-65 reject missing routes, duplicate routes, recursive scans, stale targets, and private targets.](/images/articles/claude-md-index-navigation/index-routing-budget.svg)
+*Caption: This mechanism diagram separates the responsibilities of `CLAUDE.md` and `index.md`: the former defines reading behavior, while the latter is only a project-authored entrypoint table. Readers should note that 10/26 comes only from this article's synthetic fixture, not from a general savings ratio.*
+
+## Official boundary: CLAUDE.md loads; index.md does not load automatically
+
+Claude Code's official memory documentation provides both the foundation for this approach and its limits.
+
+`CLAUDE.md` is a persistent project instruction that you write for Claude Code. The official documentation explains that Claude Code reads relevant `CLAUDE.md` files as context at the start of a session; their contents influence behavior, but they are not enforced configuration. If you need to hard-block an action, use permissions, hooks, or managed settings rather than relying only on a sentence such as “do not recursively scan.”
+
+The loading hierarchy is also important. `CLAUDE.md` and `CLAUDE.local.md` above the working directory load at launch; subdirectory `CLAUDE.md` files below the current working directory are not injected in full at the beginning, but enter the context on demand when Claude reads files in those subdirectories. This mechanism lets large projects place rules near their files, but it is still behavior for `CLAUDE.md`, not for arbitrary Markdown files.
+
+`@path` imports are often misunderstood. You can write `@docs/workflow.md` in `CLAUDE.md`, and Claude Code will expand the imported content and load it in the launch context. This works well for organizing long rules, but it is not progressive disclosure. If you import every area's `index.md` from the root `CLAUDE.md`, you are merely placing the indexes into context earlier; you have not demonstrated that “only one index is read when needed.”
+
+Therefore, this article's core boundary is:
+
+| File or mechanism | Official behavior | How this article uses it | Do not describe it as |
+| --- | --- | --- | --- |
+| `CLAUDE.md` | Project instruction context that Claude Code reads | Write routing rules, prohibit recursive vault scans, require citations to canonical targets | An enforced security policy |
+| Subdirectory `CLAUDE.md` | Can load on demand when files in that subdirectory are read | Add rules to local workspaces | An automatic discovery mechanism for ordinary indexes |
+| `@path` import | Imported content is expanded in the launch context | Use only to organize a small number of long-lived rules | On-demand loading or context savings |
+| `index.md` | An ordinary Markdown file | A project-authored route table, read only when named by instructions/workflow | A built-in Claude Code navigation feature |
+
+Codex has a similar boundary. OpenAI's Codex `AGENTS.md` documentation explains that Codex reads the `AGENTS.md` instruction chain before it works: global, then from the project root to the current directory, merging them in order and subject to a default merge-size limit. This shows that Codex also has an instruction surface; but it likewise does not imply that “Codex automatically loads arbitrary `index.md` files.” To have Codex use an index, you must explicitly specify the reading process in `AGENTS.md` or in the task as well.
+
+## When an index actually reduces reading scope
+
+For an `index.md` to reduce breadth, it must meet three conditions.
+
+First, it must be explicitly included in the workflow. The root `CLAUDE.md` can say:
+
+```md
+For vault navigation:
+- Read root `index.md` before searching.
+- Choose exactly one area index for the task.
+- Read only that area index and the canonical target unless the route is missing.
+- If a route is missing, ask for clarification instead of recursively scanning the vault.
+```
+
+The point of this rule is not that “an index exists,” but that it changes the Agent's default action from “search everything” to “follow the route first.”
+
+Second, the root index handles only routing, not explanations of all content. The root index should be a signpost, not an encyclopedia of the knowledge base:
+
+```md
+| Area | Scope / purpose | Index |
+| --- | --- | --- |
+| projects | Active project execution artifacts | projects/index.md |
+| research | Evidence and citation policy | research/index.md |
+| publishing | Public output runbooks | publishing/index.md |
+| systems | Vault maintenance runbooks | systems/index.md |
+```
+
+Third, an area index exposes only canonical entrypoints. It should let the Agent determine in a few lines “which target this task goes to,” rather than writing the background of every project as prose.
+
+```md
+| Route key | Scope / purpose | Canonical entrypoint | Owner | Verified date | Fallback |
+| --- | --- | --- | --- | --- | --- |
+| citation-policy | Citation rules for evidence notes | research/citation-policy.md | Research lead | 2026-07-12 | Ask owner before broad scan |
+```
+
+This is what a “routing budget” means: you do not have the model read the entire vault first and then act clever; instead, you define in advance which entrypoints a task should read at most. If a task does not match any route, the correct action is not to scan the vault and guess, but to trigger the fallback.
+
+## Index rows should be route tables, not prose directories
+
+Many failed `index.md` files look like this: they begin with a paragraph saying “these are my research materials,” place a few links in the middle, and add a large amount of historical background at the end. That may be passable for human browsing, but an Agent encounters three problems when executing it: unstable route keys, non-unique target files, and stale content with no owner.
+
+This article recommends six minimum fields:
+
+| Field | Purpose | Writing requirement |
+| --- | --- | --- |
+| `Route key` | Match tasks to routes | Short, stable, and script-comparable, for example `newsletter-runbook` |
+| `Scope / purpose` | State what problem this route solves | One sentence; do not write long background |
+| `Canonical entrypoint` | The unique target file | A vault-relative path; it must exist |
+| `Owner` | Who is responsible for updates | A person, role, or team; do not leave blank |
+| `Verified date` | When it was last confirmed to remain valid | An ISO date; expiration must trigger review |
+| `Fallback` | What to do when the route fails | Ask owner, create issue, or stop; do not write “just search around” |
+
+These six fields are not a product standard; they are LearnPrompt's editorial contract. Their purpose is narrow: let an Agent reliably answer “which canonical file should this task read” after reading an area index, and let a validator determine whether a route is missing, stale, or unsafe.
+
+One practical rule is: **indexes contain entrypoints, not content.** Put content in the target note; keep only sufficient route information in the index. Otherwise, you turn `index.md` into another large context file and eventually return to the old problem of “read a huge blob first, then guess.”
+
+## Frozen Showcase: 10 reads compared with a 26-file inventory
+
+This article's Showcase is the fully synthetic, reproducible `index-routing-budget`; it does not use a real personal vault.
+
+Directory location:
+
+```text
+research/articles/claude-md-index-navigation/showcase/index-routing-budget/
+```
+
+The synthetic vault has exactly 26 inspectable text files:
+
+- Root `CLAUDE.md`
+- Root `index.md`
+- Four area indexes: `projects`, `research`, `publishing`, and `systems`
+- Twenty target notes: five for each area
+
+The four synthetic tasks belong to four areas, and each has exactly one correct target:
+
+| Task | Area | Correct target |
+| --- | --- | --- |
+| release checklist | `projects` | `projects/release-checklist.md` |
+| citation policy | `research` | `research/citation-policy.md` |
+| newsletter runbook | `publishing` | `publishing/newsletter-runbook.md` |
+| vault audit runbook | `systems` | `systems/vault-audit-runbook.md` |
+
+Files must be read through `scripts/read-doc.mjs`. This wrapper appends every fixture read to a normalized trace, so “the model says it did not scan the vault” is not evidence; the trace is the evidence.
+
+A valid trace must be exactly 10 lines:
+
+```text
+CLAUDE.md
+index.md
+projects/index.md
+projects/release-checklist.md
+research/index.md
+research/citation-policy.md
+publishing/index.md
+publishing/newsletter-runbook.md
+systems/index.md
+systems/vault-audit-runbook.md
+```
+
+The control group is a deterministic naive inventory: 26 fixture files. This comparison proves only that the routing contract in this article's synthetic fixture can reduce reading from 26 files to 10 reads; it does not prove that every vault saves the same proportion, nor that any model is stronger.
+
+You can reproduce the deterministic gate:
+
+```bash
+node research/articles/claude-md-index-navigation/showcase/index-routing-budget/scripts/verify-showcase.mjs
+```
+
+Current result:
+
+```text
+PASS index-routing-budget deterministic verifier
+inventory: 26 inspectable text files
+valid routed trace: 10 reads
+naive inventory: 26 files
+valid route exit 0
+missing-route exit 61
+ambiguous-duplicate-route exit 62
+read-budget-recursive-scan exit 63
+stale-or-nonexistent-target exit 64
+private-sensitive-target exit 65
+source unchanged: yes
+```
+
+The writer session attempted exactly one nested live run as required:
+
+```bash
+CODEX_NESTED_MODEL=gpt-5.5 node research/articles/claude-md-index-navigation/showcase/index-routing-budget/scripts/run-codex-live.mjs
+```
+
+This writer-side run was blocked before the model started by the legacy CLI parameter `--ask-for-approval` and exited with `2`; the historical record is preserved in `results/live-blocked-summary.md` and `results/live-attempt-summary.json`, and was not rewritten as a success. The outer controller then corrected only the invocation shape, still using the same frozen prompt, fixture, 10/26 contract, and fresh `gpt-5.5` to run again. The final result was:
+
+- `exec_exit_code: 0`
+- The 26 fixture files were byte-identical
+- `routes.json`, `routes.md`, and `read-trace.log` were all written
+- The trace was exactly 10 lines and matched the order completely
+- No direct read command bypassing the wrapper was found
+- Deterministic validator exit `0`
+
+The success summary and three live archives are in `results/live-controller-summary.json`, `results/live-routes.*`, and `results/live-read-trace.log`. An independent read-only reviewer then reviewed the body, research package, mechanical results, and final rendering, upgrading the article to `verified` with 100/100, zero unresolved issues, and visual PASS.
+
+## Why reject 61-65 instead of “letting the model recover”
+
+A routing budget is genuinely useful because it has failure exits.
+
+`61 missing route` means that the task matches no route. For example, a user asks to “find the budget approval SOP,” but no area index has `budget-approval`. The correct action is to stop and ask the owner or add a route, not to have the Agent search the vault for “budget” on its own.
+
+`62 ambiguous duplicate route` means that two routes claim they can answer the same task, or the same task is written into the results repeatedly. Duplicate routes are more dangerous than missing routes, because the model may randomly choose whichever file appears closer. The fix is to keep one unique canonical target and change the other into a fallback or historical record.
+
+`63 read-budget / recursive-scan violation` means that the trace exceeds the budget or is in the wrong order. The valid trace in this article is the root instruction, root index, then one area index and one target for each task. Once the trace becomes a 26-file inventory, the Agent has returned to “look at the entire vault first.”
+
+`64 stale or nonexistent target` means that a route's `Verified date` does not satisfy the current contract, or its canonical entrypoint does not exist or the citation does not equal the target. This gate prevents an index from looking clean while actually pointing to an old file or an empty path after a move.
+
+`65 private/sensitive target route` means that an index routes a task to a private, secret, credential, or similarly unsuitable target for shared context. Do not expect the model to “see the secret and consciously avoid reading it.” The route table should not expose such a target.
+
+What these rejection codes have in common is that they all check the **navigation contract**, not the model's prose style. The model's own “I found the right note” is not proof; a reproducible read trace, JSON report, target citation, and source hash are proof.
+
+## Debugging: the first four places to check when a routing budget breaks
+
+If your Agent still scans the vault, check `CLAUDE.md` first. Many teams write “refer to the index,” rather than “must read the root index first and choose only one area index for each task.” The former is a suggestion; the latter is verifiable behavior.
+
+If the Agent reads too many indexes, check `@path` imports. Importing every `index.md` into `CLAUDE.md` brings them all into context at launch. You may think the structure is tidier, but this is not on-demand reading. To implement progressive routing, have the root instruction describe only the rules, then read a specific area index when the task requires it.
+
+If the Agent found the wrong file, check the route key and canonical target. A route key should be stable, short, and unambiguous; a target should be a unique entrypoint. Do not have an `index.md` say “you can read A, or B, or search C.” That pushes the navigation problem back to the model.
+
+If the validator often reports stale, check the owner and verified date. An index without an owner quickly becomes an orphan directory; an index without a date makes old routes look valid forever. Expiration does not necessarily mean that the file is wrong, but it should trigger a review.
+
+## When not to use this method
+
+If your vault has only a few dozen files and you are its only reader, do not rush to maintain a four-layer index. Direct search and human judgment may be cheaper.
+
+If your question is “which directory should new material go into,” look at a directory placement contract rather than using this method as a substitute for placement rules. This article answers only “when material already exists, how should an Agent navigate to the canonical target.”
+
+If your question is cross-session handoff, write a handoff packet. `CLAUDE.md` and `index.md` should not store the status of an incident, the next command, or temporary constraints.
+
+If your question is how to roll back after bulk editing notes, add a Git workflow. A routing budget can reduce reading scope, but it cannot provide version history, diff review, or rollback points.
+
+If your index costs more to maintain than it saves in reading cost, stop. Route tables suit stable entrypoints: runbooks, policies, project canonical docs, and public-output workflows. Temporary fragments, journals, and short-lived drafts may not be worth routing.
+
+## Exercise: write a routing budget for a small vault
+
+Practice with a small sample that contains no private information; ideally, synthesize 20 to 40 Markdown files first.
+
+1. Write the root `CLAUDE.md`: explicitly state “read the root index first, choose only one area index per task, read the canonical target, and stop if a route is missing.”
+2. Write the root `index.md`: list only 3 to 5 areas and each of their index paths.
+3. Write a route table for each area: every row contains route key, scope/purpose, canonical entrypoint, owner, verified date, and fallback.
+4. Write a minimal read trace: require all fixture reads to go through the wrapper, and output the trace at the end.
+5. Write a validator: at minimum, reject missing routes, duplicate routes, over-budget scans, stale or nonexistent targets, and private/sensitive targets.
+
+Completion criteria:
+
+- You can clearly explain why an ordinary `index.md` is not a Claude Code feature.
+- Your root `CLAUDE.md` does not import every area index.
+- One task reads at most the root instruction, root index, one area index, and one target.
+- The output cites the canonical target path, rather than “I saw it in some note.”
+- The validator fails reliably when a bad route appears, rather than relying on a human to read the model's response.
+
+## Sources and further reading
+
+- Claude Code official documentation: [How Claude remembers your project](https://code.claude.com/docs/en/memory)
+- Claude Code official documentation: [Claude Code settings](https://code.claude.com/docs/en/settings)
+- OpenAI / ChatGPT Learn official documentation: [Custom instructions with AGENTS.md](https://developers.openai.com/codex/guides/agents-md)
+- Obsidian official documentation: [How Obsidian stores data](https://obsidian.md/help/Files%2Band%2Bfolders/How%2BObsidian%2Bstores%2Bdata)
+- Obsidian official documentation: [Search](https://obsidian.md/help/Plugins/Search)
+- Obsidian official documentation: [Properties](https://obsidian.md/help/properties)
+- Chinese topic map: [Obsidian AI Orange Book](https://github.com/alchaincyf/obsidian-ai-orange-book)
+- This article's research package and Showcase: `research/articles/claude-md-index-navigation/`
+
+The official Claude Code documentation supports the current facts in this article about `CLAUDE.md`, subdirectory instructions, `@path` imports, the `AGENTS.md` boundary, and “context rather than enforced configuration.” The Codex documentation is used only to explain that `AGENTS.md` is a similar instruction surface; it is not used to infer Claude Code behavior or to claim that Codex automatically loads ordinary `index.md` files. The Obsidian documentation supports only the basic boundaries that a vault is a local Markdown folder and that search/properties exist; it does not prove that this article's routing contract is an Obsidian standard.
+
+`Obsidian AI Orange Book` is a Chinese topic map, authored by Hua Shu / `alchaincyf`. Its README states that the work may be used for learning, exchange, and sharing, and that reprints and citations must indicate the source, but it does not publish a standard CC/OSI license. This article does not copy its PDF body text, screenshots, charts, or images; the body, Showcase, and mechanism diagram have all been reorganized, and the teaching diagram is original LearnPrompt work recorded under CC BY-NC-SA 4.0 in `asset-ledger.md`.

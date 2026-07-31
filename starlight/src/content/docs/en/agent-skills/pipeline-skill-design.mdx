@@ -1,0 +1,314 @@
+---
+title: "Pipeline Skill Design: Use Stage Contracts and Receipts to Make Failures Recoverable Instead of Stuffing Steps into a Giant Prompt"
+description: Learn the minimum skeleton of stage contracts, receipts, checkpoints, resume, invalidation, and idempotency through a 3-document migration Showcase.
+sidebar:
+  order: 5
+difficulty: intermediate
+source_repo: alchaincyf/agent-skills-orange-book
+source_url: https://github.com/alchaincyf/agent-skills-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-12"
+reading_time: 15 minutes
+research_path: research/articles/pipeline-skill-design
+showcase_path: research/articles/pipeline-skill-design/showcase/docs-migration-pipeline
+showcase_status: verified
+quality_score: 98
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last checked | Author |
+| --- | --- | --- |
+| Intermediate | 15 minutes | 2026-07-12 | LearnPrompt Editorial Team |
+
+You already know to break repeated work into several steps. The problem is: once a task crashes halfway through, what tells the next run which steps truly finished and which must run again?
+
+Many so-called “pipeline Skills” do only one thing: write five actions as a longer prompt. That is certainly clearer than “help me migrate the docs,” but it still cannot answer the most important engineering questions:
+
+- After transform finishes and then crashes, where should the next run resume?
+- Why may inventory and normalize be skipped instead of guessed again?
+- Why must an old checkpoint become invalid after input is tampered with?
+- If two full reruns yield different result hashes, which layer introduced nondeterminism?
+
+This article answers only one central question: **how can a pipeline Skill use stage contracts, receipts, checkpoints, resume, invalidation, and idempotency to manage failure, rather than writing steps as a giant prompt?**
+
+I will not repeat the field tutorial already covered in [`How to Write Your First SKILL.md`](/en/agent-skills/first-skill-md/), nor the discussion of weekly-report production and human publishing boundaries in [`content-automation-pipeline`](/en/claude-code/content-automation-pipeline/). This article focuses on the **recoverable Skill orchestration skeleton**.
+
+## What you will be able to do
+
+1. Explain why a “multi-stage task” needs a stage contract rather than only a long prompt.
+2. Understand where receipts, checkpoints, resume, invalidation, and idempotency live in the artifacts of a minimal recovery skeleton.
+3. Use a 3-document migration Showcase to decide which stages can be reused and which must be invalidated.
+4. Recognize three common mistakes: treating a checkpoint as a directory name, treating resume as a performance optimization, and mistaking “looks roughly the same” for idempotence.
+
+![Five-stage docs-migration-pipeline: each stage writes one receipt; a checkpoint can remain after transform; resume skips only verified stages; tampered input triggers invalidation and rejects old receipts.](/images/articles/pipeline-skill-design/docs-migration-pipeline.svg)
+*Caption: What is truly recoverable is not a “flowchart,” but each stage leaving a receipt, with resume first checking input/output hashes; a crash after transform can continue, but an old checkpoint must be invalidated as a whole after input tampering.*
+
+:::note[Terminology boundary]
+`stage contract`, `receipt`, `checkpoint`, `resume`, `invalidation`, and `idempotency` are the operational model adopted by LearnPrompt in this article, not an official Agent Skill specification. Official materials can establish Skill directories, loading, and script boundaries; you must design and mechanically verify the recovery protocol yourself.
+:::
+
+## Why “putting the steps in a prompt” is still insufficient
+
+First, consider a very common version:
+
+```text
+Please migrate old Markdown documents into new docs:
+1. Inventory the files first.
+2. Normalize them.
+3. Transform them.
+4. Validate them.
+5. Package them at the end.
+If it fails midway, continue from the previous run.
+```
+
+This is already far more concrete than “help me migrate,” but it still lacks four essential facts:
+
+1. What evidence supports “continue” from the previous run?
+2. Which stage outputs are checkpoints, and which are only temporary files?
+3. How do old results become invalid automatically after input changes?
+4. Why should rerunning produce the same candidate hash?
+
+This is where a stage contract begins. **A pipeline Skill does not merely write down an order; it makes “when a stage counts as complete, when it can be reused, and when it must be invalidated” into an inspectable contract.**
+
+OpenAI’s current Skill documentation positions Skills as reusable workflows and explicitly recommends instructions by default, moving to scripts when deterministic behavior is needed. The open Agent Skills specification designs `scripts/`, `references/`, and `assets/` as resources loaded on demand. Together, these yield a direct engineering conclusion:
+
+- The Skill body coordinates: when to use it, what to read first, and how to interpret failure codes.
+- Scripts handle mechanics: hashes, file enumeration, candidate generation, and receipt validation.
+- Only their combination can support resume; otherwise, the model must remember “I got to transform last time.”
+
+## A minimal recovery skeleton: what exactly does a stage contract contain?
+
+This article’s Showcase freezes an isolated temporary repository: it migrates three legacy Markdown documents into Starlight-compatible candidates. The Skill directory is:
+
+```text
+.agents/skills/docs-migration-pipeline/
+├── SKILL.md
+├── references/stage-contract.md
+├── scripts/run-pipeline.mjs
+├── scripts/verify-receipts.mjs
+└── assets/receipt-template.md
+```
+
+The stages are fixed as follows:
+
+| Stage | Reads | Writes | Reusable after failure? |
+| --- | --- | --- | --- |
+| `inventory` | `legacy/*.md` | `work/inventory.json` | Yes, but input hashes must be checked again |
+| `normalize` | `work/inventory.json` | `work/normalized/*.json` | Yes, subject to the same condition |
+| `transform` | normalized records | `work/transformed/*.mdx` | Yes; this article simulates a crash here |
+| `validate` | transformed candidates | `reports/validation.json` | Only a complete receipt counts as a checkpoint |
+| `package-candidate` | validated candidates | `migration-candidate/docs/*.mdx` + `manifest.json` | Final artifact; must be replayable |
+
+These five steps are not finished merely by arranging names. Every stage writes a receipt containing at least:
+
+- `input_sha`
+- `output_sha`
+- `command`
+- `exit_code`
+- `status`
+- `started_seq`
+- `finished_seq`
+
+There is an easy-to-miss detail here: this article deliberately does not include wall-clock time in replayable hashes. You may certainly record time in logs, but **do not let wall clock time determine whether a checkpoint is reusable**. Otherwise, identical input and output will be judged as different on the second run merely because the run time changed.
+
+## Receipts and checkpoints: preserve stages that are “proven complete”
+
+Many people understand a checkpoint as “a directory with intermediate files.” That misses another layer.
+
+A genuinely reusable checkpoint meets at least two conditions at once:
+
+1. The stage output is bound to its receipt.
+2. The next run can re-verify that `receipt.input_sha == current_input_sha` and `receipt.output_sha == current_output_sha`.
+
+That is why this article defines a checkpoint more strictly than “the files still exist.” Existing files do not mean the evidence remains valid.
+
+The document-migration example makes this easier to see:
+
+- The `transform` stage writes three candidate `.mdx` files.
+- It also writes `receipts/transform.json`.
+- On the next resume, the system first recalculates the normalized-input hash.
+- It may skip transform only if that hash is still identical and the output hashes of all three transformed files also match the receipt.
+
+What is reused then is not “the directory is named transformed,” but “the transform step has been proven by a receipt, and that evidence is still valid now.”
+
+## Resume is not a time-saving feature; it is a recovery protocol led by invalidation rules
+
+This article’s Showcase freezes four key scenarios:
+
+| Scenario | Expected exit code | What it proves |
+| --- | ---: | --- |
+| fresh success | `0` | The entire pipeline can generate a candidate successfully from scratch |
+| crash after transform | `30` | A crash can preserve the first three stage checkpoints |
+| resume after crash | `0` | Resume truly reuses the first three receipts rather than rerunning them |
+| stale resume after input tamper | `32` | After input changes, old receipts must be invalidated as a whole |
+| receipt missing or corrupt | `33` | Incomplete evidence cannot pretend to support recovery |
+
+The most important part is not the numbers themselves, but that **the reasons for invalidation are encoded separately**:
+
+- `32` means input has changed and the old checkpoint is stale.
+- `33` means a receipt is missing, corrupt, or does not match real output; the system cannot prove that skipping is safe.
+
+This distinction directly affects the caller’s strategy:
+
+- On `32`, rebuild preceding stages; do not keep reusing them.
+- On `33`, repair the evidence chain first; do not treat “the files still seem to be there” as success.
+
+If both errors are collapsed into “resume failed,” the caller can only guess how to proceed, returning you to the world of giant prompts.
+
+## Showcase: how docs-migration-pipeline freezes crash, resume, and invalidation
+
+This Showcase does only one small thing: migrate three legacy Markdown documents into candidates, without overwriting source or publishing. That keeps the focus on the recovery skeleton rather than real-content risk.
+
+The offline replay entry point is:
+
+```bash
+node research/articles/pipeline-skill-design/showcase/docs-migration-pipeline/scripts/verify-showcase.mjs
+```
+
+Offline results frozen during the writer phase on 2026-07-12:
+
+```text
+fresh success: 0
+crash after transform: 30
+resume after crash: 0
+stale resume after input tamper: 32
+receipt issue: 33
+rerun stability: 0
+privacy scan: 0
+```
+
+More important than one “PASS” are three concrete proofs:
+
+### 1. Resume truly reused the checkpoint
+
+`resume-summary.json` freezes `reused_stages` as:
+
+```json
+["inventory", "normalize", "transform"]
+```
+
+This shows that recovery does not “roughly pick up where the crash occurred”; it explicitly skips the verified first three stages and continues only with `validate -> package-candidate`.
+
+### 2. Tampering truly triggers invalidation
+
+After the crash, the Showcase deliberately appends one line to `legacy/02-api-auth.md`, then runs `--resume`. Because the `input_sha` for the `inventory` stage no longer matches the old receipt, the system reliably returns `32`. This proves: **resume obeys the input contract, not the wish to go faster.**
+
+### 3. Full reruns have stable hashes
+
+In `rerun-stability.txt`, the `candidate_sha` from two fresh-success runs is identical. This proves that the final candidate does not mix wall-clock time, absolute temporary paths, or random ordering into its output.
+
+## A real Codex recovery drill: preserve blocked first, then rerun successfully outside the host
+
+The user requested a real, explicit Codex `$docs-migration-pipeline` invocation in an isolated temporary repository, completing “simulated crash -> resume -> verify receipts.” The command entry point is:
+
+```bash
+CODEX_NESTED_MODEL=gpt-5.5 \
+node research/articles/pipeline-skill-design/showcase/docs-migration-pipeline/scripts/run-codex-live.mjs
+```
+
+The writer isolation layer’s first attempt was not presented as success. It was blocked by two host constraints:
+
+- The state DB was in a read-only location and could not write `~/.codex/state_5.sqlite`.
+- In-process app-server initialization was blocked with `Operation not permitted`.
+
+We therefore retained the failure evidence. The outer orchestrator then corrected the output schema by adding the existing `notes` property to `required`, and reran with the same frozen fixture, prompt, schema, and gpt-5.5. The real result was:
+
+```text
+skill_invocation: $docs-migration-pipeline
+exec_exit_code: 0
+crash_exit_code: 30
+resume_exit_code: 0
+verify_exit_code: 0
+source_unchanged: true
+candidate_hash: cdc8bf70d44838e2239ff00052b092cb0ce7d198b77ec5b581e17f799e8dc892
+changed_files: migration-candidate/, receipts/, reports/, work/
+```
+
+One deliberately less-than-pretty result remains here: the model report explicitly acknowledges that “only candidate / receipt / report changed” is false because `work/` also contains checkpoints and intermediate files. This has more teaching value than hiding intermediate state, and matches the real boundary of a pipeline recovery mechanism.
+
+The research pack also retains:
+
+- `contracts/prompt.md`
+- `contracts/final-report.schema.json`
+- `scripts/run-codex-live.mjs`
+- `results/live-run-summary.json`
+- `results/codex-stderr-summary.txt`
+- `results/codex-last-message.json`
+
+An independent read-only reviewer then checked the article, frozen artifacts, and actual rendered graphic item by item, and gave PASS 98/100 with blocker / major / minor all at 0; this article was therefore elevated to `showcase_status: verified`.
+
+## When not to use this pipeline skeleton
+
+Not every multi-step task is worth receipts and resume.
+
+### Case one: the process is still exploratory
+
+If you are changing stage boundaries every time, do not rush to add checkpoints. Defining receipts too early only fossilizes a vague process into a protocol that is harder to maintain.
+
+### Case two: the input changes wholesale all the time
+
+If source changes substantially each time, resume may bring little benefit while invalidations become frequent. In this case, rerunning the entire pipeline is safer than “forcing recovery.”
+
+### Case three: there is only one deterministic script
+
+If the task is fundamentally “read one input and write one output,” with neither multi-stage evidence nor intermediate checkpoints needed, a normal script is enough. Do not force it into a Skill merely for form.
+
+### Case four: the real missing piece is external-system access
+
+If the key problem is “access Feishu, GitHub, a database, or storage,” first clarify the MCP or connector boundary. A pipeline Skill solves orchestration and recovery; it does not replace an external connection layer.
+
+## Exercise: write an invalidation rule for your own pipeline
+
+Pick a multi-stage task you have repeated recently—document migration, data organization, or a release checklist—and do not write code first. Fill in these five lines:
+
+```yaml
+Stage name:
+This stage's input:
+This stage's output:
+Conditions that allow resume:
+Conditions that require invalidation:
+```
+
+The observable completion standard is not “you feel you wrote it,” but that you can add two more statements:
+
+1. Which files or fields should this stage’s `input_sha` be computed from?
+2. If the receipt is lost, corrupt, or inconsistent with current output, which explicit exit code should the caller receive?
+
+If you cannot answer these two questions, do not rush into recovery. Your process has not yet grown into a verifiable contract.
+
+## A directly reusable checklist
+
+Before making a multi-stage task into a pipeline Skill, go through these six questions:
+
+```yaml
+Does every stage have clear input and output: yes / no
+Can every stage write a stable receipt: yes / no
+Can a checkpoint re-verify input/output hashes: yes / no
+Is there a clear invalidation rule when input changes: yes / no
+Should the final hash remain stable after a complete rerun: yes / no
+If a nested run is blocked by the host, can blocked evidence be retained: yes / no
+```
+
+Only when most of the first five can be answered “yes” is resume worth building. Otherwise, you are merely moving complexity from the prompt into the directory structure.
+
+The observable completion standard should also be mechanical, not “I think this time is probably fine”:
+
+1. Which stages did resume truly reuse after a crash?
+2. Does the old receipt reliably become invalid after tampering?
+3. Does the system refuse to continue when a receipt is missing?
+4. Are candidate hashes identical across two full reruns?
+
+## Sources and further reading
+
+- [Agent Skills specification](https://agentskills.io/specification) (primary specification; supports Skill directories, `SKILL.md`, `scripts/` / `references/` / `assets/`, and progressive loading)
+- [OpenAI Learn: Build skills](https://learn.chatgpt.com/docs/build-skills) (primary documentation; supports `.agents/skills`, reusable workflows, and the boundary of moving to scripts when deterministic behavior is needed)
+- [OpenAI Learn: Customization overview](https://learn.chatgpt.com/docs/customization/overview) (primary documentation; supports the layering of `AGENTS.md`, Skills, and MCP)
+- [Claude Code Docs: Skills](https://code.claude.com/docs/en/skills) (primary documentation; supports extracting repeatedly pasted instructions / checklists / multi-step procedures into a Skill)
+- [Node.js Crypto API](https://nodejs.org/api/crypto.html) (primary runtime documentation; supports `createHash()` as an implementation of input/output hashing)
+- [Node.js File system API](https://nodejs.org/api/fs.html) (primary runtime documentation; supports deterministic file reading, writing, and enumeration)
+- [Agent Skills Orange Book repository](https://github.com/alchaincyf/agent-skills-orange-book) (Chinese topical map / secondary material)
+
+Official materials support the current facts in this article about Skill containers, path layering, script boundaries, and runtime APIs; all were checked on 2026-07-12. The designs for `stage contract`, `receipt`, `checkpoint`, `resume`, `invalidation`, and `idempotency` in this article are LearnPrompt’s operational implementation and are not presented as an official specification.
+
+The Orange Book is used only as a topical map for the idea that a pipeline Skill is a design pattern. This article read the local mirror `$TMPDIR/agent-skills-orange-book/README_zh.md` to confirm its author, purpose, and license boundary; its README currently says only “provided free of charge, for personal learning only,” and provides no standard open-source license. This article does not copy its PDF text, screenshots, or images, and preserves only the link, author attribution, purpose, and restriction statement.

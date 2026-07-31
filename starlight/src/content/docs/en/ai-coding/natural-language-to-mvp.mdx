@@ -1,0 +1,199 @@
+---
+title: "From Natural-Language Requirements to a Runnable MVP: Freeze an Idea into an Agent-Ready Slice"
+description: Use four dimensions—input, output, failure states, and acceptance actions—to freeze a vague product idea into the smallest runnable slice a coding agent can implement and verify in one pass.
+sidebar:
+  order: 3
+difficulty: beginner
+source_repo: alchaincyf/claude-code-orange-book
+source_url: https://github.com/alchaincyf/claude-code-orange-book
+updated_from: "2026-05"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-11"
+reading_time: 12 minutes
+research_path: research/articles/natural-language-to-mvp
+showcase_path: research/articles/natural-language-to-mvp/showcase
+showcase_status: verified
+quality_score: 96
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Beginner | 12 minutes | 2026-07-11 | LearnPrompt Editorial Team |
+
+You tell a coding agent, “I want an AI news radar. Help me track the most important AI developments.” Ten minutes later it gives you something huge that does not run: scraping, login, UI, and notifications are tangled together. When one step errors, you neither know how far it got nor what actually counts as done.
+
+The problem is not that the model is not smart enough. The sentence is still a vision, not a requirement. It does not say where the data comes from, what the deliverable looks like, what happens on failure, or what proves completion. Until those four things are fixed, the requirement is not frozen; making the prompt longer does not change that.
+
+> The smallest unit of an MVP is not an idea. It is a slice that can be accepted. If you cannot yet write the acceptance action, the requirement is not ready to hand to an agent.
+
+## What you will be able to do
+
+1. Rewrite a vague idea as an executable user value: who gets what result, in which situation.
+2. Cut scope through input, output, failure states, and acceptance actions, with a stopping criterion for how small to make it.
+3. Write a frozen task card that a coding agent can implement in one pass, while explicitly moving good ideas into the backlog.
+4. Turn “what counts as done” into an exit code with an acceptance script rather than visual inspection.
+
+![A vague idea is frozen across input, output, failure state, and acceptance action, converging into the smallest runnable slice while the rest moves to the backlog](/images/articles/natural-language-to-mvp/freeze-funnel.svg)
+*Caption: Focus on the middle column: if any one of the four items is vague, the requirement is not frozen. The moment all four are fixed, open-ended creation becomes a determinate task an agent can verify.*
+
+:::note[This is not a business MVP]
+The classic MVP comes from Lean Startup: it means learning the maximum amount of validated knowledge about users with minimum effort, and addresses a market hypothesis. This article handles an earlier step only: before handing work to a coding agent, freeze the requirement to a technical granularity that can be implemented and objectively accepted in one pass. The two MVPs serve different goals; do not conflate them.
+:::
+
+## First, see what an agent needs
+
+Anthropic’s engineering practice for long-running agents emphasizes a key move: before writing code, agree on what done looks like; then use acceptance criteria with hard thresholds to judge each round, separating the role that does work from the role that judges it. Bring that requirement forward into the requirements stage and you get this article’s foundation.
+
+An idea is not executable because it leaves four things that should be fixed blank. Fix them one by one and the requirement changes from open-ended creation to a determinate task.
+
+| Dimension | What it answers | Typical failure when left blank |
+| --- | --- | --- |
+| Input | Where data comes from and what it looks like | The agent invents a data source; scraping and authentication swallow the main flow |
+| Output | The exact shape of the deliverable | You cannot accept what was built because you do not know what to inspect |
+| Failure state | What happens with missing, invalid, or zero results | It crashes on dirty data or silently produces an empty result while you assume it is done |
+| Acceptance action | Which command to run and what signal means success | You can only inspect repeatedly; it cannot enter automation or be judged independently by a second role |
+
+:::note[This is LearnPrompt’s requirement-freezing model]
+The four-dimensional method of “input / output / failure state / acceptance action” is LearnPrompt’s operational editorial synthesis, created by bringing a Harness’s capabilities, constraints, and acceptance requirements forward into the requirements stage. It is not an established industry standard or an official taxonomy from Anthropic, OpenAI, or another vendor.
+:::
+
+This model has one purpose: tell you when you can stop cutting. When all four items can be fixed, the slice is small enough; when any one remains vague, do not start yet.
+
+## Showcase: freeze a vague requirement into a runnable slice
+
+This is a real process, not an abstract template. The goal is to turn the AI news radar from the opening into an MVP that can run and be accepted the same day. Full scripts, fixtures, and frozen output live in the research package at `showcase/news-radar-mvp/`.
+
+### Step 1: ask for decisions that cannot be guessed
+
+Ask only questions that change the deliverable; freeze the rest under the smallest assumption.
+
+| Decision | Frozen conclusion | Why the agent cannot guess it |
+| --- | --- | --- |
+| Data source | The first version reads one local `feed.json`, with no network | Real scraping brings anti-bot measures, rate limits, and authentication that swamp the main flow |
+| Definition of “important” | An item is relevant when it matches watched tags; more matches rank higher | This determines the core algorithm and cannot be a default |
+| Output | A Markdown summary printed to stdout | This determines what the acceptance action looks like |
+| First-version size | One script plus one acceptance script, runnable with one command | Prevents the first version from carrying web, login, and scheduling |
+
+### Step 2: write the decisions as a frozen task card
+
+This card is what you hand to the agent. It pins down both the four dimensions and the backlog.
+
+```yaml
+goal: 从本地 feed.json 生成一份 Top N 的 AI 新闻摘要
+user_value: 让我一眼看到命中关注标签的最重要几条，别的先不看
+input:
+  - feed.json：数组，每条含 title / source / url / published / tags
+process:
+  - 按关注标签 {anthropic, openai, coding-agent, model-release} 打分
+  - 同标题去重
+  - 按分数、其次按日期排序，取 Top N（默认 3）
+output: Markdown 摘要，含标题、来源、命中标签数、链接
+failure_states:
+  - 输入缺失 / 非法 JSON / 顶层非数组 → 非零退出并给可读错误
+  - 某条缺 title/source/tags → 判为坏数据，非零退出
+  - 零命中 → 非零退出（摘要为空不算成功）
+acceptance:
+  - node radar.mjs feed.json --top 3 输出恰好 3 条且含来源
+  - node verify.mjs 全绿、退出码 0
+allowed_paths: [radar.mjs, verify.mjs, feed.json, empty-feed.json]
+backlog_not_now:
+  - 真实抓取（网页 / RSS / GitHub / 邮件 / X）
+  - 多平台去噪与相似度合并
+  - Web UI、登录、定时任务、通知推送
+```
+
+### Step 3: implement and run it
+
+The implementation is only `radar.mjs`: read `feed.json`, score watched tags, deduplicate titles, take Top N, print Markdown, and handle every failure state explicitly with a nonzero exit. The environment is local Node v24 with no third-party dependencies and no network.
+
+Actual main-flow output (tested 2026-07-11):
+
+```text
+$ node radar.mjs feed.json --top 3
+# AI 新闻雷达 · Top 3
+
+- **Anthropic 发布 Claude 新模型** — 官方博客（命中 2 个关注标签）
+  https://example.com/a
+- **OpenAI 更新 Codex CLI** — 官方博客（命中 2 个关注标签）
+  https://example.com/b
+- **开源 Agent 框架月度进展** — GitHub Trending（命中 1 个关注标签）
+  https://example.com/e
+```
+
+Notice that the duplicate “Anthropic publishes a new Claude model” appears only once: deduplication is working.
+
+### Step 4: make acceptance an exit code
+
+Acceptance in the frozen task card cannot rely on inspection. `verify.mjs` turns it into four deterministic checks; it exits 0 only when all are green:
+
+```text
+$ node verify.mjs
+PASS Top 3 恰好输出三条并含来源
+PASS 重复标题被去重
+PASS 缺失输入文件时非零退出
+PASS 零命中时非零退出
+
+summary: 4 passed, 0 failed
+```
+
+Failure states genuinely fail rather than silently passing:
+
+```text
+$ node radar.mjs nope.json
+radar: 读不到输入文件：nope.json
+exit=1
+```
+
+### What this Showcase proves—and does not prove
+
+- It proves that a vague requirement can be cut into a slice that runs and can be accepted in a day; once the four dimensions are clear, implementation changes from open-ended creation into a determinate task.
+- It does not prove that real scraping, cross-platform denoising, or similarity merging are feasible. Those are precisely the items moved into the backlog. The fixture is deliberately minimal data, and watched tags are a hard-coded example rather than a general definition of importance.
+
+## Common failure modes
+
+### Writing an MVP as a business plan
+
+You ask for login, payments, recommendations, admin tools, and polished animation at once. That not only violates the minimal-investment intent of an MVP; more critically, it leaves no slice that can be implemented in one pass. Ask first: if you remove everything but one main flow, does it still stand?
+
+### Defining only the success path, not failure states
+
+The agent crashes on dirty data or silently emits no result, while you think it is finished. The Showcase rule that zero matches must exit nonzero exists specifically to prevent this.
+
+### Accepting by eye
+
+Without a `verify` script, you can only inspect repeatedly; it neither enters automation nor lets a second role judge independently. Write completion as an exit code and acceptance becomes reproducible and transferable.
+
+### An invisible backlog
+
+If good ideas are not written into the backlog, they return to the first version as “let’s add this too,” enlarging the slice again. Recording them explicitly draws a boundary the first version can keep.
+
+## When not to use this method
+
+- The requirement is market validation rather than technical delivery: use a business MVP and user interviews, not a frozen code slice.
+- You already have a repository and a clear task: then pass the baton to the six-cell [project kickoff and acceptance checklist](/en/ai-coding/project-checklist/) and the Plan→Patch→Verify→Learn loop in [the minimum agentic-coding workflow](/en/ai-coding/minimum-agentic-coding-workflow/).
+- The idea genuinely cannot run locally first because it depends on external accounts, real-time data, or hardware: use fixtures or stubs to run the main flow first, and leave real integration in the backlog—exactly what this Showcase does.
+
+## Exercise: freeze one of your own ideas into a task card
+
+Choose a product idea you actually want to make, then fill in this card in no more than fifteen lines:
+
+```yaml
+user_value: 谁 / 在什么场景 / 得到什么结果
+input: 数据从哪来，长什么样
+output: 交付物的确切形态
+failure_states: 缺失 / 非法 / 空结果时怎么办
+acceptance: 跑哪条命令、看到什么算成功
+backlog_not_now: 这一版明确不做的三件事
+```
+
+The observable completion criterion is this: if you cannot write one runnable command on the `acceptance` line, the requirement is not frozen. Fill that in before handing it to an agent. At that point you have a scope problem, not a model or tool selection problem.
+
+## Sources and further reading
+
+- [Anthropic: Effective harnesses for long-running agents](https://www.anthropic.com/engineering/harness-design-long-running-apps) (primary engineering practice: agree on done first, accept with hard thresholds, and separate implementation from review)
+- [OpenAI Codex CLI documentation](https://learn.chatgpt.com/docs/codex/cli) (primary product documentation: describe tasks in natural language; permissions and sandboxing control boundaries)
+- [Minimum viable product (Wikipedia, paraphrasing Eric Ries’s definition)](https://en.wikipedia.org/wiki/Minimum_viable_product) (background on the business MVP to distinguish; not a claim of this article)
+- [Claude Code Orange Book](https://github.com/alchaincyf/claude-code-orange-book)
+
+Primary sources support the product behavior and engineering practice described here; the Wikipedia entry is background only. The Claude Code Orange Book is under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/); this article labels it a Chinese secondary topic map and retains its source and license. The four-dimensional freezing method, task card, and Showcase were rebuilt and checked independently. Facts about product behavior are based on official material checked on 2026-07-11.

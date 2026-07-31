@@ -1,0 +1,308 @@
+---
+title: "Keep Long Tasks from Drifting: Manage Claude Code Context with Session Segments, Handoffs, and Checkpoints"
+description: "Split one real bug fix into exploration, frozen conclusions, clean implementation, and verification—and know when to continue, compact, clear, resume, or fork."
+sidebar:
+  order: 4
+difficulty: intermediate
+source_repo: alchaincyf/claude-code-orange-book
+source_url: https://github.com/alchaincyf/claude-code-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-11"
+reading_time: 15 minutes
+research_path: research/articles/advanced-conversation-patterns
+showcase_path: research/articles/advanced-conversation-patterns/showcase
+showcase_status: verified
+quality_score: 98
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Intermediate | 15 minutes | 2026-07-11 | LearnPrompt Editorial Team |
+
+You can already have Claude Code finish small tasks: changing one or two files, running a test, and viewing a diff all work well. But once a task becomes “investigate a bug, plan the fix, then implement and verify,” things begin to change:
+
+- Earlier it clearly said “do not edit files yet,” but later it casually changes three unrelated files.
+- Acceptance criteria defined early are overwritten by new guesses in the latter half.
+- When the same session gets long, you can no longer tell whether you are advancing or repeating trial and error in a dirty context.
+
+This is not simply “the prompt is not good enough.” A more common root cause is packing exploration, planning, implementation, and acceptance into one session without deciding what state the next step should preserve. Long-task stability is not about making Claude remember more; it is about treating session operations as engineering boundaries.
+
+## What you will be able to do after reading
+
+After reading, you should be able to reliably do three things:
+
+1. Distinguish what `continue`, `compact`, `clear`, `resume`, `fork`, and checkpoints each preserve.
+2. Split a real bug task into **Stage A read-only exploration** and **Stage B clean implementation**, freezing a handoff between them.
+3. Reject a handoff that lacks an acceptance command, preventing Stage B from returning to the subjective judgment “it looks fixed.”
+
+This article will not do three things:
+
+- It will not expand into multi-agent work.
+- It will not turn one Showcase into a ranking of model ability.
+- It will not claim that `resume`, `compact`, or checkpoints automatically guarantee quality.
+
+## Why long tasks get dirtier as they continue
+
+Official `best-practices` puts the problem plainly: Claude's context window fills quickly, and performance degrades as it fills. This window contains not only your messages but files read, command output, loaded rules, and memory. The longer a session gets, the more the system needs to remove old output and summarize it; once compaction occurs, the important early boundaries are easier to weaken.
+
+Thus, long-task instability is often not that “the model cannot write code,” but that these three things have not been separated:
+
+| Steps mixed together | Common consequence | What is not actually missing |
+| --- | --- | --- |
+| Exploration and implementation in one message | Changes begin before symptoms are understood | “Be smarter” |
+| Acceptance criteria exist only in conversation | Completion is forgotten later | “Remind it more often” |
+| Continuing to append history after the session is dirty | One bug becomes increasingly scattered | “Keep talking for one more round” |
+
+Official `how-claude-code-works` provides the same mechanism-level view: the Claude Code agentic loop is essentially **gather context → take action → verify results**. Without explicit segments, noise read during exploration, long logs emitted during failure, and interim attempts during implementation all flow into the later verification stage.
+
+The real question becomes: **in the next step, do I need to preserve full history, compressed conclusions, or only a frozen handoff?**
+
+## First distinguish what sessions, context, and checkpoints each manage
+
+These terms are often used together, but they are not the same layer.
+
+### Session
+
+A session is one persistent workflow with Claude. Official `sessions` documentation says Claude Code saves sessions locally, so you can:
+
+- Use `claude --continue` to continue the most recent session in the current directory.
+- Use `claude --resume` or `/resume` to select an old session.
+- Use `--fork-session` or `/branch` to copy history into a new session ID.
+
+A session answers: “Do I want to continue this workflow?”
+
+### Context
+
+Context is the material current reasoning actually sees. Even in the same session, it changes with messages, files, and command output, and it is compacted near its limit. `/compact` manages this layer: it stays in the same session but replaces history with a summary to free space.
+
+Context answers: “Which details are currently in Claude's head?”
+
+### Checkpoint / rewind
+
+A checkpoint answers: “Do I want to undo the edits or session state that just happened?”
+
+The boundary in official `checkpointing` documentation matters:
+
+- You can restore code, restore conversation, or restore both.
+- You can summarize a local stretch of messages.
+- But it **cannot track file modifications caused by bash commands**, so it is not a substitute for Git.
+
+This means checkpoints suit undoing a just-made risky edit or compressing a side discussion; they do not mean “everything is safe from now on.”
+
+## When to choose each of five operations
+
+If you treat these operations as a command list, they are easy to confuse. A safer question is: **what state do I want to preserve?**
+
+| What you truly want to preserve | Better operation | Why not another one |
+| --- | --- | --- |
+| Full workflow and full history; it was only interrupted | `continue` / `resume` | You want continuity, not cleaning |
+| Same workflow, but history is already too long | `compact` | You want to stay in the session but compress noise |
+| Old session is dirty; you want to carry away only conclusions | New handoff after `clear` | Appending further only amplifies dirty context |
+| Preserve original investigation while trying another implementation route | `fork` | Keep original session unchanged and branch history into a new session |
+| Undo a risky edit or incorrect attempt just made | checkpoint / rewind | This is rollback, not a new workflow |
+
+![Conversation-pattern selection map: on the left, continue, compact, clear, and fork preserve different state; on the right, a two-stage pipeline shows explore, frozen handoff, fresh implementation, and verification.](/images/articles/advanced-conversation-patterns/conversation-patterns-map.svg)
+*Caption: The left side first asks “what state do I want to preserve?” before choosing continue, compact, clear, or fork. The right side shows that long-task stability comes not from endlessly continuing the conversation but from freezing exploration as a handoff, then using only repository plus frozen handoff for implementation and verification in a new process.*
+
+Read the left side first, then the right:
+
+1. The four boxes on the left are not command priority; they are four task relationships.
+2. Green `continue / resume` and blue `compact` remain in the original workflow; the only difference is whether history is compressed.
+3. Orange `clear + new prompt` means “discard dirty context without discarding conclusions,” which requires a handoff first.
+4. Pink `fork` does not clear; it copies history into another branch, suitable for comparing two implementation routes.
+5. The line on the right intentionally separates Stage A and Stage B, emphasizing that Stage B input should be as small as possible: only repository and frozen handoff.
+
+The diagram conveys one conclusion: **not every “continue” should continue the old context, and not every “restart” should explain everything from zero.**
+
+## Split a real bug fix into Explore → Handoff → Fresh Implement
+
+Official guidance recommends “explore first, plan next, then code,” but what makes this work on a long task is freezing exploration conclusions. This article's Showcase demonstrates it with a local, zero-dependency `slugify` fixture.
+
+### Stage A: read-only exploration
+
+Stage A's goal is not to fix the bug but to freeze conclusions. It does only three things:
+
+1. Read repository facts: `package.json`, `src/slugify.js`, and `tests/run-tests.mjs`.
+2. Run baseline tests to confirm the symptom.
+3. Write a handoff stating what Stage B may change, how it will accept, and which risks remain.
+
+The actual Stage A baseline result is archived in `research/articles/advanced-conversation-patterns/showcase/results/stage-a-summary.txt`. Its core symptom is only one line:
+
+```text
+FAIL collapses punctuation gaps into one hyphen expected=rock-roll actual=rock--roll
+```
+
+The value of this line is not that it “shows the model understands,” but that it compresses the problem into a transferable engineering fact: **before acceptance, the current repository really fails.**
+
+### Freeze the handoff
+
+This article does not write a large, empty handoff summary. It requires it to answer five questions:
+
+| Field | Why it is required |
+| --- | --- |
+| `symptom` | What Stage B must fix |
+| `evidence` | Why the symptom is believed true |
+| `allowed_files` | Prevent Stage B from casually expanding scope |
+| `acceptance.commands` | Turn “fixed” into a mechanical signal |
+| `risks` | Which boundaries still need human attention |
+
+The positive handoff is `showcase/handoff/handoff-good.json`. It freezes the acceptance command as `node tests/run-tests.mjs` and locks allowed modification scope to `src/slugify.js`. Together, these make it sufficient for Stage B to execute directly in clean context.
+
+### Stage B: clean-context implementation
+
+Stage B runs in a completely new process and copies the fixture into a system temporary directory. It consumes only two inputs:
+
+- A repository copy.
+- The Stage A frozen handoff.
+
+This matters because you are not proving “I can remember what we discussed earlier.” You are proving that prior exploration conclusions are sufficient for another clean process to make the minimal fix.
+
+The positive result is archived in `showcase/results/positive-run.txt`. It replays the baseline failure, changes only `src/slugify.js`, then reruns and passes the acceptance command. There is no “the model thinks it is complete”; there are only three engineering facts:
+
+1. The baseline exit code failed.
+2. Only an allowed file changed.
+3. The acceptance command's exit code became 0.
+
+## Why a handoff without an acceptance command must be rejected
+
+This is the hard boundary this article most wants to emphasize.
+
+Many teams write exploration summaries that contain only “I think the issue is roughly here.” Such a handoff looks better than none, but cannot truly support Stage B because it does not define completion. Without an acceptance command, this loop does not exist:
+
+> Change → run check → read pass/fail → decide whether to stop
+
+The negative handoff is `showcase/handoff/handoff-missing-acceptance.json`. It contains symptom, evidence, and allowed files but deliberately omits `acceptance.commands`. Stage B's deterministic gate rejects it directly rather than guessing a command and proceeding.
+
+The core line in archived `showcase/results/negative-run.txt` is:
+
+```text
+REJECT missing acceptance.commands[0]
+```
+
+This is not nitpicking; it prevents Stage B from degrading into “it looks fixed.” Official `best-practices` stresses the same logic: Claude needs a runnable verification gate. The command can be very small, such as one unit test, but it cannot be absent.
+
+## How this works with continue, compact, clear, resume, and fork
+
+In actual work, you normally do not design from zero every time. More practical combinations are as follows:
+
+### Scenario 1: the task is unchanged; you only left the terminal temporarily
+
+Use `continue` or `resume`. You preserve the whole workstream, so no artificial history cut is necessary.
+
+### Scenario 2: direction is unchanged, but the session is already long
+
+Consider `compact` first. You still want the workflow, but need long logs and side discussions compressed. Note that it only reduces noise; it cannot prove conclusions in the summary are correct.
+
+### Scenario 3: the prior discussion is dirty, but exploration conclusions are clear enough
+
+This is the scenario where the article most recommends handoffs. Freeze a handoff, then `clear`, then feed only this in the new prompt:
+
+- The repository.
+- The handoff.
+- Allowed file scope.
+- The acceptance command.
+
+You are not “starting from zero”; you are “discarding noise and retaining conclusions.”
+
+### Scenario 4: preserve the original investigation and try another implementation route
+
+Use `fork`. For example, the original session has identified the bug, but you want to compare “fix the regex” and “split into multiple helpers.” Fork has these benefits:
+
+- The original investigation history remains.
+- The new route gets a new session ID.
+- After failure, you can revisit the original route instead of mixing two implementations into one history.
+
+### Scenario 5: you just made a dangerous edit and want to undo it
+
+Use checkpoint/rewind, not `clear`. `clear` addresses context contamination and does not undo current disk edits; a checkpoint rolls back code, conversation, or both. Official guidance also warns that bash changes are outside its tracking scope, so pair high-risk operations with Git.
+
+## Common failure modes and boundaries
+
+This approach is not a silver bullet. At least four boundaries must be clear.
+
+### 1. A longer handoff is not better
+
+If a handoff becomes a long report, Stage B will be drowned in noise too. What deserves freezing is the execution contract, not the whole chat history.
+
+### 2. `compact` saves space, not responsibility
+
+Compacting context does not make incorrect conclusions disappear automatically. If earlier investigation was wrong, the summary only makes it wrong more concisely.
+
+### 3. `resume` and `fork` do not cleanse history automatically
+
+`resume` continues and `fork` copies. If original history is dirty, both inherit it. Clean implementation still needs handoff plus new context.
+
+### 4. A bad acceptance gate can still pass a bad result
+
+This article's negative case proves only that “no acceptance command should be rejected”; it does not prove that every acceptance command is sufficient. Before production, you must still review whether the command covers the target behavior.
+
+## A copyable handoff template
+
+This template has more execution value than “write a summary,” because it separates what Stage B actually needs:
+
+```json
+{
+  "task": "Fix the bug with a minimal change",
+  "symptom": "Where current behavior is wrong",
+  "evidence": [
+    "Reproduction command",
+    "The most important one-line failure output"
+  ],
+  "allowed_files": [
+    "The only file allowed to change"
+  ],
+  "acceptance": {
+    "commands": [
+      "One fastest acceptance command"
+    ],
+    "expected_exit_code": 0
+  },
+  "risks": [
+    "Do not casually expand scope",
+    "Boundaries still not covered"
+  ]
+}
+```
+
+When using it with Claude Code, put it in a new prompt and add this explicit instruction:
+
+```md
+Implement only from the repository and this handoff. Do not re-explore unrelated files; change only allowed_files;
+when complete, run acceptance.commands and report the actual exit code and remaining risks.
+```
+
+This is much more stable than “continue fixing that previous idea,” because it reduces what Stage B needs to inherit to a minimum.
+
+## Exercise
+
+Take a bug you recently fixed in your repository and perform this exercise:
+
+1. In plan mode or with a read-only prompt, do Stage A: explore read-only and write a handoff.
+2. Force yourself to complete `allowed_files` and `acceptance.commands`.
+3. Start again in a clean session, feed only the handoff, and do not copy full history.
+4. If Stage B still must ask many questions about “what exactly is the problem,” the handoff is inadequate.
+
+Completion does not mean merely “fixed.” It must meet all three:
+
+- Stage B did not expand file scope.
+- The acceptance command actually ran and returned an explainable exit code.
+- You can clearly state why this should use `clear`, why it should not use `continue`, or why it should use `fork`.
+
+## Sources and further reading
+
+- Official primary material:
+  - [Best practices for Claude Code](https://code.claude.com/docs/en/best-practices)
+  - [Manage sessions](https://code.claude.com/docs/en/sessions)
+  - [Checkpointing](https://code.claude.com/docs/en/checkpointing)
+  - [How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works)
+  - [Common workflows](https://code.claude.com/docs/en/common-workflows)
+  - [CLI reference](https://code.claude.com/docs/en/cli-reference)
+- Local evidence for this article:
+  - `research/articles/advanced-conversation-patterns/showcase/`
+  - `research/articles/advanced-conversation-patterns/evidence-ledger.md`
+- Secondary thematic map (only for topic selection and Chinese terminology, not as evidence of current product behavior):
+  - [Claude Code Orange Book](https://github.com/alchaincyf/claude-code-orange-book)
+
+Official documentation supports current product behavior and session semantics; this article's Showcase proves only local deterministic process isolation. The Orange Book is retained as a secondary thematic map with attribution and link; its repository README declares CC BY-NC-SA 4.0.

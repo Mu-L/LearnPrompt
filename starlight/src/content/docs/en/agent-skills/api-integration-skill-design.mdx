@@ -1,0 +1,288 @@
+---
+title: "API Integration Skill Design: Write a REST Call as a Request Contract Instead of Making the Agent Guess Tokens, Retries, Schema, and Side Effects"
+description: "Learn from a read-only release-feed Showcase how to freeze credential sources, GET/pagination, 429/5xx handling, schema validation, and redacted evidence."
+sidebar:
+  order: 6
+difficulty: advanced
+source_repo: alchaincyf/agent-skills-orange-book
+source_url: https://github.com/alchaincyf/agent-skills-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-12"
+reading_time: 16 minutes
+research_path: research/articles/api-integration-skill-design
+showcase_path: research/articles/api-integration-skill-design/showcase/release-feed-api
+showcase_status: verified
+quality_score: 100
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Advanced | 16 minutes | 2026-07-12 | LearnPrompt Editorial Team |
+
+You already know how to write a basic Skill, and that “connecting an API means writing a script.” What actually drags a project into rework is usually not `fetch()` itself, but several more engineering-heavy questions:
+
+- Can a token appear in the repository, command line, or logs at all?
+- Why can an Agent turn a task that only reads a release feed into `POST` or another write operation on the spot?
+- When pagination encounters `429`, `5xx`, an empty payload, or missing fields, should it retry, wait, or fail explicitly?
+- Which contents in a report count as sufficiently replayable evidence, and which become a leak or tainted evidence as soon as they are written down?
+
+This article answers only one central question: **when a Skill must connect to a read-only REST API, how can you write a call as an auditable request contract instead of leaving credential, method, retry, schema, and side effects for the Agent to guess at runtime?**
+
+I will not discuss MCP or connector selection here, and will not call any public-network, paid, or private API. This article uses only a loopback fixture in an isolated temporary repository to explain the contract an API-integration Skill most needs to freeze first.
+
+## What you will be able to do after reading
+
+1. Explain why an API Skill needs a request contract first; merely being able to make requests is insufficient.
+2. Complete six boundaries for a read-only REST integration: credential source, request envelope, `GET` semantics, serial pagination, `429`/`5xx` policy, and response schema.
+3. Use fixed exit codes to distinguish four typical failures: missing credential, schema drift, exhausted `5xx` retries, and a configuration demanding a mutating method.
+4. Decide when logic belongs in scripts instead of continuing to pile it into the body of `SKILL.md`.
+
+![The request-contract loop from environment-variable injection through request envelope, GET and serial pagination, 429/5xx retry, schema validation, and the final report; 41/42/43/44 failure branches are also labeled.](/images/articles/api-integration-skill-design/api-request-contract.svg)
+*Caption: The key to an API-integration Skill is not “getting HTTP working,” but having inspectable contracts before and after the call: credentials may enter only through environment variables; requests may use only `GET` and serial pagination; `429` and `5xx` each have a policy; schema drift must not be prettified as “no new release”; and the result retains only replayable, redacted evidence.*
+
+:::note[Terminology boundary]
+The `request contract`, `41 / 42 / 43 / 44` exit codes, and `release-feed-api` fixture in this article are LearnPrompt's operational design. They are neither the official Agent Skills specification nor a general standard for any REST API.
+:::
+
+## Why “able to send a request” does not mean “able to deliver”
+
+Many old-style API tutorials give requirements like this:
+
+```text
+Read the release feed, summarize the newest version, and retry if there is an error.
+```
+
+On the surface, that states what to do. Engineering-wise, it still lacks five essential facts:
+
+1. Does the credential come from an environment variable, command line, `.env`, or repository file?
+2. Is this task read-only or may it write? If it is read-only, should `POST` / `PUT` / `PATCH` / `DELETE` be rejected before any request is sent?
+3. Should pagination run concurrently? On rate limiting, should it race ahead or wait for `Retry-After`?
+4. If the response is an empty array or lacks fields, does that mean “no new release,” or has the upstream contract drifted?
+5. What evidence should remain for the next person to replay the work instead of relying on a vague summary?
+
+This is where a request contract begins. **The value of an API Skill is not helping an Agent remember one more endpoint; it is writing down, as a checkable protocol, the conditions under which this call is acceptable.**
+
+Three layers of primary material are important when combined here:
+
+- OpenAI currently defines a Skill as a reusable workflow made of instructions, resources, and optional scripts, and explicitly recommends preferring instructions unless deterministic behavior or external tools are needed; move work into scripts when mechanical execution is genuinely required.
+- Claude Code likewise currently treats a Skill as a container for repeatedly pasted instructions, checklists, or multi-step procedures. Its body loads only when used, so lengthy implementation details should not all be crammed into the main file.
+- The Agent Skills specification fixes layers such as `SKILL.md`, `scripts/`, `references/`, and `assets/`, and emphasizes progressive loading of metadata, instructions, and resources.
+
+Applied to an API scenario, the engineering conclusion is straightforward:
+
+- `SKILL.md` explains when to use it, which contract to read, and which situations must be rejected.
+- `references/` stores the API contract, failure codes, schema, and boundary descriptions.
+- `scripts/` performs deterministic actions such as method checks, pagination, retries, schema validation, and writing reports.
+
+If you leave all of this for an Agent to infer on the spot, it is not “calling an API”; it is **guessing your API contract**.
+
+## Which six things an API Skill request contract must freeze at minimum
+
+This article uses the isolated `release-feed-api` showcase to explain. The Skill's target is small: read a read-only release feed and write:
+
+```text
+reports/releases.json
+reports/releases.md
+```
+
+Its core is not the endpoint itself, but six contracts that precede model judgment:
+
+| Contract surface | What to freeze first | Why it cannot be left to the Agent to guess |
+| --- | --- | --- |
+| credential source | Read `RELEASE_FEED_BASE_URL` and `RELEASE_FEED_TOKEN` only from environment variables | Once a secret is allowed into the repo/CLI/logs, no later success is publishable |
+| request envelope | Method, path, pagination parameters, output path, maximum `5xx` retries | Without an envelope, the Agent can change method, output, or budget on the spot |
+| read-only boundary | This article permits only `GET` | A read-only task should not retain freedom to write before it reaches the network |
+| pagination policy | Serial pagination, no concurrent fan-out | Concurrency often creates rate limits first and then scrambles ordered evidence |
+| retry policy | Obey `Retry-After` for `429`; perform only limited retry for `5xx` | Rate limiting and server errors are not the same problem and should not be merged into “try again” |
+| response contract | Required fields, empty-payload handling, minimum evidence surface | If missing fields and empty data are written as “no new release,” you disguise contract drift as a business conclusion |
+
+The most underestimated part is the **read-only boundary**. RFC 9110 establishes that `GET` retrieves the current representation of a target resource. GitHub REST best practices say that many `POST` / `PATCH` / `PUT` / `DELETE` requests receive extra throttling and recommend serial requests to reduce secondary-rate-limit risk. Together, this does not mean treating GitHub as a standard; it yields a general engineering judgment:
+
+> If the task is only “read a release feed and produce a report,” freeze the method as `GET` first instead of leaving it as a parameter the model may choose freely.
+
+## Why `GET`, pagination, `429`, `5xx`, and schema must be separated
+
+Writing every API failure as “retry once” is the most common mistake. At least four types of state must be handled separately:
+
+### 1. Missing credentials are not a network problem
+
+If `RELEASE_FEED_TOKEN` is absent, the correct behavior is not to make a request and see what happens, but to exit `41` directly. The problem occurs **before the call**, not on the network.
+
+### 2. `429` does not mean “the service is down”
+
+RFC 6585 says that `429 Too Many Requests` can include `Retry-After`, telling a client how long to wait before the next request. For testability, this fixture allows the server to return `Retry-After: 0`, but the article must state the real boundary: **if an online service provides a longer wait value, you should obey it.**
+
+### 3. `5xx` is not permission to retry forever
+
+`5xx` means the server has a problem; it does not mean you should jitter indefinitely. This article freezes it separately as “limited retry; exit `43` after the budget is exhausted.” That gives callers a clear branch:
+
+- While within budget, retrying may continue.
+- Beyond budget, fail explicitly instead of making a person read logs to guess whether the fluctuation was transient.
+
+### 4. Empty payloads and missing fields do not mean “no new release”
+
+If the release feed returns an empty array or a release lacks a key field such as `published_at`, this article treats it uniformly as a `42` contract violation. The reason is simple:
+
+- “No new release” is a business conclusion.
+- An empty payload or missing field means the **upstream contract does not hold**.
+
+Once these are written as the same thing, downstream consumers believe you made a normal business decision rather than discovered schema drift.
+
+## Showcase: what `release-feed-api` freezes in this case
+
+The Showcase directory is:
+
+```text
+research/articles/api-integration-skill-design/showcase/release-feed-api/
+├── fixture/
+│   ├── .agents/skills/release-feed-api/
+│   │   ├── SKILL.md
+│   │   ├── references/api-contract.md
+│   │   ├── scripts/fetch-releases.mjs
+│   │   ├── scripts/mock-release-api.mjs
+│   │   └── assets/report-template.md
+│   ├── release-feed.config.json
+│   ├── package.json
+│   └── test/release-feed-api.test.mjs
+├── contracts/
+│   ├── prompt.md
+│   └── final-report.schema.json
+├── scripts/
+│   ├── verify-showcase.mjs
+│   ├── release-gate.mjs
+│   ├── privacy-scan.mjs
+│   └── run-codex-live.mjs
+└── results/
+```
+
+This fixture explicitly does five things:
+
+1. It injects credentials only through `RELEASE_FEED_BASE_URL` and `RELEASE_FEED_TOKEN`.
+2. If configuration requests `POST`, the script exits `44` before sending a request.
+3. It fixes request order as serial pagination and forbids concurrent fan-out.
+4. Evidence retains only request path, pagination order, status code, retry count, and output path; it retains no raw headers, credentials, runtime IDs, or local absolute paths.
+5. Markdown/JSON reports are generated only in successful scenarios; failed scenarios explain the cause through fixed exit codes and a minimal summary.
+
+### Two actual runs: preserve the block first, then complete it with an outer environment
+
+The writer sandbox's first attempt was indeed blocked by `EPERM listen 127.0.0.1`. This result was not deleted: it proves that host constraints must be recorded separately and cannot be disguised as a business failure. The outer orchestrator then reran the same fixture, prompt, and schema in an isolated temporary repository that allowed loopback, and fixed two issues exposed by the actual run:
+
+1. `release-gate.mjs` originally waited for fetch with a synchronous child process, which locked the mock server's event loop in the same process; after switching to an asynchronous child process, the server could respond for real.
+2. The “missing credential” test originally inherited the token from the live run; explicitly setting that test's token to empty kept it hermetic whether or not an upper-level environment variable existed.
+
+The final frozen results are:
+
+```text
+fixture tests: 0 (7/7 pass)
+two-page success: 0
+429 once then success: 0
+missing credential: 41
+schema drift: 42
+503 retry exhausted: 43
+mutating method rejected before network: 44
+privacy scan: 0
+live Codex gpt-5.5 explicit $release-feed-api: 0
+live release count: 3
+live reports: releases.json + releases.md
+live tests: 7/7 pass
+```
+
+In the live run, Codex added only `reports/`; both reports were actually written to disk. The JSON records 3 releases, two serial page requests, zero retries, and redacted credential evidence, while `npm test` passes 7/7. Writer-side blocked evidence and outer success evidence are both retained: the former explains the host boundary, and the latter proves the request contract can execute in full.
+
+:::caution[Why you cannot look only at the final green result]
+Without the initial block and subsequent repair process, we would not have found the two issues of “a synchronous child process locks the mock server” and “the test inherits a token.” The Showcase's value is not producing one PASS, but making failure locatable to the runner, environment, or contract layer.
+:::
+
+## Why fixed exit codes matter more than “writing clear error messages”
+
+Natural-language summaries should of course remain, but they cannot drive later actions by themselves. The value of exit codes is that downstream consumers do not need to parse prose again to know how to proceed:
+
+| Exit code | What it means | What the caller should do next |
+| --- | --- | --- |
+| `41` | Missing credential | Supply an environment variable; do not suspect the upstream API |
+| `42` | Schema or empty-data contract failure | Inspect the response shape; do not write “no new release” |
+| `43` | `5xx` retry budget exhausted | Stop and escalate the failure; do not retry forever |
+| `44` | Method out of bounds | Fix the config/Skill contract; no first network packet should have been sent |
+
+This encoding also has teaching value: it turns “where did failure occur?” into a protocol known before the call rather than leaving the next Agent to explain the problem on the spot.
+
+## When not to use this API Skill design
+
+Not every task involving an API is worth turning into the request contract described here.
+
+### Situation one: you are actually building a write-operation workbench
+
+If the core task is “create an issue, change a repository, send a notification, or write a database,” it is not this article's read-only contract. Discuss side effects, permissions, approvals, and rollback first rather than copying the read-only release-feed approach.
+
+### Situation two: the interface is still unstable and the schema is not even settled
+
+If upstream fields are changing frequently, first stabilize the schema or add an adapter. Do not force a pile of volatile details into `SKILL.md`.
+
+### Situation three: there is no reason to preserve request evidence
+
+If this is a one-off script that nobody will hand over or replay, an ordinary script may be enough. This article suits integrations that must be maintained, handed over, and audited in the future.
+
+### Situation four: the actual problem is not HTTP but external-platform access
+
+If you are blocked by an account, browser login, remote permission, or organization-level system boundary, solve the access layer first rather than writing a request contract like this one.
+
+## A directly reusable request-contract checklist
+
+Before you write the next API call into a Skill, complete these eight lines:
+
+```yaml
+Credential source:
+Base URL source:
+Allowed method:
+Pagination policy:
+429 policy:
+5xx policy:
+Required response fields:
+Evidence allowed in the report:
+```
+
+If you want to go one step further, add at least four explicit rejection rules:
+
+```yaml
+Exit code for missing credential:
+Exit code for method out of bounds:
+Exit code for schema or empty payload:
+Exit code for exhausted 5xx retries:
+```
+
+As long as you cannot write these four rules, your API Skill is probably still at the “can send a request” stage rather than a “handover-ready contract.”
+
+## Exercise: write the first version of rejection rules for your own Skill
+
+Choose a read-only API you genuinely want to connect to recently. You do not need to make a real request; first do only this:
+
+1. Write `credential source / method / pagination / required response fields / report outputs`.
+2. Then write four exit codes covering at least:
+   - Missing credential
+   - Method out of bounds
+   - Schema drift
+   - Exhausted server-failure budget
+3. Finally ask yourself: **if the next person sees only these exit codes and one redacted piece of evidence, can they tell where to fix the next step?**
+
+If the answer remains “not really,” do not rush to connect a real API. Complete the contract first.
+
+## Sources and further reading
+
+- [Agent Skills specification](https://agentskills.io/specification) (primary specification; supports Skill directories, `SKILL.md`, `scripts/` / `references/` / `assets/`, and progressive loading)
+- [Best practices for skill creators](https://agentskills.io/skill-creation/best-practices) (primary best practices; supports “start from real experience,” “progressive disclosure,” and “procedure over declaration”)
+- [OpenAI Learn: Build skills](https://learn.chatgpt.com/docs/build-skills) (primary documentation; supports Codex Skills as reusable workflow containers and “prefer instructions, move into scripts when necessary”)
+- [OpenAI Learn: Customization overview](https://learn.chatgpt.com/docs/customization/overview) (primary documentation; supports responsibility layering for `AGENTS.md`, Skills, and MCP)
+- [Claude Code Docs: Skills](https://code.claude.com/docs/en/skills) (primary documentation; supports Claude-side Skill triggers and on-demand loading boundaries)
+- [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html) (IETF standard; supports the retrieval semantics of `GET`)
+- [RFC 6585: Additional HTTP Status Codes](https://www.rfc-editor.org/rfc/rfc6585.html) (IETF standard; supports the semantics of `429` and `Retry-After`)
+- [GitHub REST API best practices](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api) (official REST best practices; supports serial requests, `429` handling, and throttling mutative requests)
+- [GitHub REST pagination](https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api) (official documentation; supports that pagination returns only a subset of results and later pages must be requested)
+- [Keeping your API credentials secure](https://docs.github.com/en/rest/authentication/keeping-your-api-credentials-secure) (official security documentation; supports the credential boundary of “no hardcoding, no plaintext repository push”)
+- [Node.js globals: fetch](https://nodejs.org/api/globals.html#fetch) (official runtime documentation; supports Node's current built-in `fetch` / `Request` / `Response` / `Headers`)
+- [Agent Skills Orange Book repository](https://github.com/alchaincyf/agent-skills-orange-book) (Chinese thematic map / secondary source)
+
+Official material supports the current facts in this article about the Skill container, `GET` semantics, pagination, `429`, credential security, and the Node runtime. The `request contract`, `41 / 42 / 43 / 44` exit codes, and `release-feed-api` fixture are LearnPrompt educational implementations and are not presented as HTTP or vendor standards.
+
+The Orange Book is used only as a Chinese thematic map for the “Integration pattern.” This article refers to the repository README for author information, topical positioning, and licensing boundaries: the author is Huashu, and the README currently states that the book is free for personal and educational use but may not be commercially redistributed without permission. This article copies none of its PDF body text, screenshots, or images; it retains only the link, author attribution, purpose, and limitation statement.

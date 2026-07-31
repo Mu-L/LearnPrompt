@@ -1,0 +1,84 @@
+---
+title: How to Use This Wiki
+description: Choose a reading path by task, judge tutorials by evidence, and keep a record of what you learned.
+sidebar:
+  order: 2
+difficulty: beginner
+legacy_status: current
+---
+
+## Don't read in order — write down your current blocker first
+
+Before opening the table of contents, write one sentence: "What am I doing, where am I stuck, and what counts as done?"
+
+For example, "I want to learn Codex" isn't enough to decide what to read; "I have a local repo and want Codex to fix one broken doc link, tests must pass, and no pushing allowed" leads you straight to [Getting started with the Codex CLI](../../codex/codex-cli-workflow/) and [Sandbox and approvals](../../codex/sandbox-and-permissions/).
+
+## Three ways to read
+
+### First time on a project: follow the full loop
+
+Start with the [AI Practice Map](../ai-practice-map/), then run one full "task → plan → change → verify → retro" loop on a small, disposable or easily revertible project. The first time, don't switch model, editor, deployment platform, and project structure all at once.
+
+### Currently solving a problem: follow the blocker
+
+Only open the 1–3 articles the current decision actually needs:
+
+- Not sure how to describe the task: read [Task, context, and verification](../context-task-verification/).
+- Not sure whether to choose Claude Code or Codex: read [Choosing a tool](../../ai-coding/choose-claude-code-or-codex/).
+- The agent can do the work but isn't reliable: find the missing layer starting from [The five components of a harness](../../agent-engineering/what-is-harness/).
+- A repeated workflow keeps getting longer: first decide [whether it's worth turning into a Skill](../../agent-skills/what-are-agent-skills/).
+- Things don't carry over across sessions: distinguish the [memory layer](../../agent-engineering/memory-layer/) from [handoff-ready Markdown](../../obsidian-ai/markdown-as-agent-memory/).
+
+### After finishing a project: follow the failures
+
+Use real failures to check tutorials against, rather than writing rules from memory. If a failure comes from unclear boundaries, go back to instruction/constraint; if it comes from results that are hard to judge, go back to feedback; if it comes from state drifting across multiple steps, go back to orchestration. Only turn a workflow into a Skill once it's repeatable and stable.
+
+## How to read one in-depth tutorial
+
+Read a tutorial in four passes:
+
+1. **Task and boundaries first**: confirm it solves your problem, and also confirm "when not to use it."
+2. **Then the diagram and showcase**: understand both the happy path and the rejected path — don't just copy the final command.
+3. **Replay it hands-on**: swap the synthetic input for your own small sample, and keep the commands, exit codes, and diffs.
+4. **Sources last**: commands, permissions, prices, and versions that change often must be re-checked against official sources.
+
+A showcase proves how one frozen contract behaves in a given environment — it doesn't automatically prove the same holds for every project, every version, or every permission combination.
+
+## Understanding the editorial workflow states
+
+The four items below are control-plane states used by the production plan and `research/`, not four display labels meant to be written into every public page's frontmatter. A public in-depth tutorial is only marked `verified` after passing every gate; unfinished states stay in the control plane and are never dressed up as public, finished work.
+
+| State | What it means | How to use it |
+| --- | --- | --- |
+| `verified` | Research, showcase, independent review, teaching diagrams, and mechanical gates have all passed | Safe as a current starting point; still re-check volatile facts officially |
+| `review` | Under independent review, conclusions not yet frozen | Treat as a draft reference only, don't base high-risk decisions on it |
+| `partial` | Research or the evidence chain is incomplete | Don't treat the example as an already-verified approach |
+| `blocked` | Still clearly blocked within the allotted retry budget | Check the blocker record first, don't repeat claims of success |
+
+Nav pages don't carry a showcase status, and never borrow `verified` just to look complete. Their job is to help you find the body content that has already passed the gates.
+
+## Keep a learning receipt
+
+After finishing each article, save only these six items:
+
+```md
+# Learning receipt
+- Current task:
+- Tutorial used:
+- Input or command I actually ran:
+- Evidence it passed:
+- Where it failed or didn't apply:
+- Rule, memory, or Skill to write back next time:
+```
+
+This receipt is more useful than "marked as read": the next agent can see what you actually did, what wasn't proven, and where to pick up from.
+
+## How to read sources and licensing
+
+The bottom of each article keeps only the sources actually used, without a separate source-card component. Sources fall into three tiers:
+
+- **Primary sources**: official product docs, specs, code repos, and release notes, used to confirm capabilities and versions.
+- **Secondary topic maps**: for example the Orange Book, used to discover the problem space — not a substitute for official facts.
+- **Field experiments**: frozen fixtures, scripts, receipts, and reviews inside the repo, used to prove the article's own showcase.
+
+For the full section-to-source mapping, Orange Book attribution, and licensing boundaries, see the [Source Index](../../sources/source-index/).

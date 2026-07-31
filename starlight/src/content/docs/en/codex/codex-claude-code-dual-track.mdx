@@ -1,0 +1,320 @@
+---
+title: "Claude Code and Codex Dual-Track Development: Hand Off with Git Artifacts, Not a Memory Relay"
+description: "Use a brand-neutral handoff contract, receipt, worktree, and gate to switch lanes, degrade safely, and independently accept work between Claude Code and Codex."
+sidebar:
+  order: 6
+difficulty: intermediate
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-12"
+reading_time: 16 minutes
+research_path: research/articles/codex-claude-code-dual-track
+showcase_path: research/articles/codex-claude-code-dual-track/showcase
+showcase_status: verified
+quality_score: 94
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Intermediate | 16 minutes | 2026-07-12 | LearnPrompt Editorial Team |
+
+You have decided to keep both tools. Claude Code may accompany discovery in a terminal, IDE, or independent session; Codex may take implementation and acceptance in a local CLI, detached review, or worktree. The hard part is not “which is stronger,” but **how to switch between the two channels without losing context, boundaries, and failure state**.
+
+At this point, many teams regress into two low-level practices:
+
+1. Paste the previous conversation summary into the next tool and hope it “continues.”
+2. Give both tools high privileges in the same checkout, then judge by eye whose result looks more correct.
+
+What both lack is not model ability but an engineering interface. Without a baseline commit, allowed paths, failure receipt, and mechanical gate, you cannot say what happened during handoff, much less how to degrade after a lane fails.
+
+> This article explicitly labels `handoff contract`, `dual_track_complete`, and `degraded_single_lane` as LearnPrompt Editorial Team operating models. They use official primitives such as worktrees, review, sessions, `AGENTS.md`, and prompt boundaries, but are **not** official definitions of any product-specific UI term.
+
+## What you will be able to do after reading
+
+After reading, you should independently be able to do five things:
+
+1. Distinguish three easily confused topics: `choose-claude-code-or-codex` is about selection, this article is about handoff when keeping both, and `multi-agent-collaboration` is about splitting multiple parallel workers.
+2. Organize dual-track work with four Git-adjacent artifacts: `contract`, `receipt`, `patch`, and `gate`.
+3. Health-check the Claude lane first, knowing when it can produce a diagnosis receipt and when it can only write a degraded summary.
+4. Have the Codex lane modify only allowed files in an isolated Git worktree, run tests, and deliver a structured receipt.
+5. Use a deterministic gate to distinguish `dual_track_complete`, `degraded_single_lane`, and `partial`.
+
+![A diagram explaining healthy dual-track and degraded_single_lane branches, and gate exit codes for a missing receipt, write-set overreach, and contract drift.](/images/articles/codex-claude-code-dual-track/handoff-degradation-lab.svg)
+*Caption: The same frozen contract can support both healthy dual-track and degraded_single_lane paths. The difference is not who implements, but whether a Claude diagnosis receipt genuinely exists and whether the integrator gate accepts the declared state.*
+
+## Distinguish these three tutorials first, or you will debate the wrong question
+
+This is not the previous [How to Choose Claude Code or Codex: Do Not Compare Models; Determine the Work Mode First](/en/ai-coding/choose-claude-code-or-codex/). That article asks whether requirements are still vague or already frozen, and whether you should remain in local interactive exploration or delegate fully.
+
+Nor is this [What Problems Are Multi-Agent Collaboration Suited to Solve?](/en/claude-code/multi-agent-collaboration/). That article asks whether work can split into parallel workers and how to freeze interfaces, assign non-overlapping file ownership, and avoid overwrites.
+
+This article's question is narrower but more daily:
+
+- You have already decided to **keep both entry points**.
+- This task may not need parallel workers.
+- You want to know **how to switch lanes between two tools** while retaining Git baseline, write set, tests, and failure state.
+
+If you merge these questions, you start asking seemingly sophisticated but ineffective questions such as “is Claude better for thinking while Codex is better for changing code?” They ignore a harder reality: **current official material says both sides support worktrees and isolated review/sessions, so roles cannot be written as brand nature; roles are process division.**
+
+Claude documentation clearly covers worktrees, independent sessions, and subagent permission separation; Codex documentation likewise covers worktrees, detached review tasks, the `AGENTS.md` instruction chain, and prompt boundaries. In other words:
+
+- Claude can perform read-only diagnosis and Codex can implement.
+- Codex can perform read-only review and Claude can implement in a worktree.
+
+Stability comes not from brand division, but from freezing the handoff unit into verifiable artifacts.
+
+## What dual tracks really hand off is not chat history, but four artifact types
+
+A stable dual-track workflow should reduce handoff to at least four entities:
+
+| Artifact | What it answers | What happens if it is missing |
+| --- | --- | --- |
+| `contract` | What the goal is, what may change, what may not change, and how to accept | The next person guesses while working and scope expands |
+| `receipt` | What a lane actually did or failed to do, and against which SHA | You cannot judge how far the prior lane got |
+| `patch` | What the minimal code change is and whether it can replay offline | You can only trust a prose summary |
+| `gate` | How to verify state claim, write set, and tests without calling a model | Anyone can declare “completed” orally |
+
+Of these, `receipt` is easiest to underestimate. It is not merely a “final summary.” It must also answer:
+
+1. Did this lane receive a model result?
+2. Which baseline SHA did it see?
+3. Which contract SHA did it receive?
+4. Which files does it claim to have changed, and which tests did it run?
+5. On failure, did it stop at health, diagnosis, implementation, or gate?
+
+Once receipts are clear, the distinction between `dual_track_complete` and `degraded_single_lane` becomes clear:
+
+| State | Required receipts | May it claim dual-track completion? |
+| --- | --- | --- |
+| `dual_track_complete` | Claude health, Claude diagnosis, Codex completion, integrator gate PASS | Yes |
+| `degraded_single_lane` | Claude health shows no model result, Codex completion, integrator gate PASS | No; only declare degraded completion |
+| `partial` | Any critical receipt is missing, or gate/build/review is unfinished | No |
+
+This is why this article separates a `health receipt` from a `diagnosis receipt`. The former proves only whether a lane is alive; the latter proves it read the fixture and delivered a conclusion.
+
+## Freeze the handoff contract so tools can be interchangeable
+
+Look at the contract frozen by this Showcase. It is not “fix the timezone bug,” but a boundary a gate can mechanically inspect:
+
+```json
+{
+  "showcase_name": "handoff-degradation-lab",
+  "issue_id": "incident-reporter-local-day",
+  "goal": "Archive incidents under the reporter's local calendar day, not the UTC day.",
+  "baseline_sha": "d3f5e409b65fca9e4d7ceaebe9e340756b5065f1",
+  "allowed_paths": ["src/archiveIncident.js"],
+  "forbidden_paths": ["README.md", "AGENTS.md", "package.json", "test/archiveIncident.test.js"],
+  "verify_command": "npm test",
+  "expected_changed_files": ["src/archiveIncident.js"]
+}
+```
+
+The most important part is not `goal`, but the items after it:
+
+- `baseline_sha` brings both lanes to the same baseline.
+- `allowed_paths` / `forbidden_paths` make the write set rejectable rather than merely warnable.
+- `verify_command` turns “looks fixed” into an executable check.
+- `expected_changed_files` lets patch scope and receipt scope be compared.
+
+Remove these four and leave only “make the smallest change,” and you no longer have a handoff contract—only a polite request.
+
+This is also the boundary official prompting documentation repeatedly emphasizes: larger tasks need not just a goal, but context, output, and boundaries. If agent boundaries do not land on specific files, commands, and stopping conditions, they cannot enter a gate.
+
+:::note[Why there is also a local `AGENTS.md` here]
+Codex documentation explains that it reads `AGENTS.md` along global and project chains. Therefore this fixture contains a tiny local `AGENTS.md` that repeats only three things: modify only `src/archiveIncident.js`, run `npm test`, and report changed files. It does not replace the contract; it exposes the same boundary to both model and gate.
+:::
+
+## Showcase: how one minimal Node bug flows through dual tracks
+
+The fixture is not “scan an unfamiliar repository.” It is one specific Node.js problem: incidents should archive by the reporter's local date, but the current implementation lazily uses the UTC day.
+
+The bug file has only this:
+
+```js
+function dayKeyForReporter(incident) {
+  return new Date(incident.reportedAt).toISOString().slice(0, 10);
+}
+```
+
+This turns `2026-01-15T01:30:00Z` uniformly into `2026-01-15`. That is fine for a Tokyo reporter but wrong for a Los Angeles reporter, whose local date is still `2026-01-14`.
+
+The baseline test is intentionally small with only two cases:
+
+1. Los Angeles: should expose the bug.
+2. Tokyo: should retain the same day.
+
+The writer-stage frozen preflight result is:
+
+- `npm test` exit code `1`.
+- Of two tests, `pass 1 / fail 1`.
+- The Los Angeles case fails.
+
+This minimal fixture matters because it returns dual-track attention to what must actually be verified:
+
+- Can the Claude lane produce a read-only diagnosis receipt?
+- Can the Codex lane modify only one file?
+- Can the gate recognize whether the state is declared healthy or degraded?
+
+### What ideal healthy dual-track looks like
+
+When healthy, the lab sequence is:
+
+1. The Claude lane runs a health check first.
+2. The Claude lane reads the fixture only and produces a diagnosis receipt stating that `toISOString().slice(0, 10)` mistakes UTC for the reporter's local day.
+3. An outer harness freezes the same contract and hands baseline SHA and contract SHA to the Codex lane.
+4. The Codex lane enters an isolated Git worktree, changes only `src/archiveIncident.js`, runs `npm test`, and returns a completion receipt.
+5. The integrator gate mechanically checks both receipts, patch, SHAs, changed files, and tests.
+
+No step requires “Claude naturally diagnoses” or “Codex naturally implements.” Reverse roles if you wish. The point is only: **who owns read/write permission this round, and who owns read-only diagnostic permission.**
+
+### Real Claude evidence in this worktree: health summary only, no diagnosis receipt
+
+On this machine on 2026-07-12, the Claude fact was not “it diagnosed well,” but a simpler and more important failure state. The main session captured two redacted probe summaries outside the worktree:
+
+1. After removing `CLAUDE_CODE_OAUTH_TOKEN`, there was no streamed model output for about 90 seconds, after which it was interrupted.
+2. With `sonnet` and `stream-json` fixed, it returned `503 server_error` repeatedly; attempts `1-6` were observed, input/output tokens were both `0`, and it was interrupted.
+
+The research pack commits only a minimum `claude-health-summary.json`, explicitly marked an **outer harness summary**, not a complete raw transcript. This has two reasons:
+
+- A probe without a model result can prove only that the lane was unavailable at that moment; it cannot fabricate a diagnosis receipt.
+- Raw transcripts often include session identifiers, temporary paths, or other sensitive runtime detail and should not enter a public research pack directly.
+
+Thus this summary can establish only:
+
+- `Claude lane unhealthy`
+- `diagnosis receipt missing`
+- `if implementation proceeds, it can only take the degraded path`
+
+It **cannot** establish `dual_track_complete`.
+
+:::caution[Do not turn one 503 into a product-stability conclusion]
+This article states only that this machine, these two probes, and these parameters did not produce a model result on 2026-07-12. It is not a ranking of Claude Code stability and cannot conversely prove Codex is necessarily more stable.
+:::
+
+## Real degradation: how the Codex lane takes over after Claude lane failure
+
+The lack of a Claude diagnosis receipt does not mean the whole task must stop; it changes **the state you may finally declare**. The writer's nested sandbox first ran Codex preflight but was blocked during host runtime initialization, producing no model output and no fixture changes. The controller then gave the same contract to an outer writable isolated worktree and ran the real implementation lane:
+
+```bash
+codex -C <worktree> \
+  -m gpt-5.5 \
+  -s workspace-write \
+  -a never \
+  exec --ephemeral --ignore-rules \
+  --output-schema <schema-file> \
+  -o <completion-receipt.json> -
+```
+
+Before the first real request, the current CLI exposed two response-schema compatibility requirements: objects must explicitly set `additionalProperties: false`, and `const` fields must include `type`. Both requests returned 400 during schema preflight; the model did not run and the worktree stayed clean. The third request entered model execution only after the schema was tightened.
+
+The frozen result of that successful run was:
+
+- `codex-cli 0.142.2`, fixed model `gpt-5.5`.
+- `workspace-write` sandbox and `never` approval policy.
+- Only `src/archiveIncident.js` changed.
+- The patch formats `reportedAt` by `reporterTimeZone` into local year-month-day.
+- `npm test` exits `0`, with `tests=2 / pass=2 / fail=0`.
+- Baseline SHA, contract SHA, and changed files in the completion receipt exactly match the frozen contract.
+
+The actual execution state was therefore `degraded_single_lane`: the Claude lane has only a failed health summary, the Codex lane has a real completion receipt, and the deterministic gate passes. It is not healthy dual-track and cannot write in the missing Claude diagnosis afterward.
+
+This demonstrates why failure levels need separation:
+
+- Claude failed at health/model result.
+- Nested writer Codex failed at host runtime initialization.
+- Two outer schema failures stopped at request validation.
+- Only the final outer Codex run reached implementation/test/receipt.
+
+The public research pack preserves only redacted summaries, structured receipt, zero-context patch, test summary, and replay; absolute paths, runtime IDs, and raw stdout/stderr remain outside the worktree. Writer stage remained `showcase_status: partial`; only after independent final review and final publishing gate passed did it mechanically rise to `verified`. This has now happened; do not confuse “a real Showcase exists” with “independent final review is complete.”
+
+## How the gate distinguishes healthy, degraded, and false completion claims
+
+The integrator gate calls no model and performs four checks:
+
+1. Baseline SHA matches the frozen value.
+2. Contract SHA matches the frozen contract.
+3. Patch and receipt changed files fall only in `allowed_paths`.
+4. The current state claim agrees with receipt completeness.
+
+Thus three negative cases reliably reach different exit codes:
+
+| Scenario | Why it fails | Exit code |
+| --- | --- | ---: |
+| Missing Claude diagnosis receipt but claiming `dual_track_complete` | State claim contradicts receipt completeness | 30 |
+| Patch changes `README.md` or another out-of-bounds file | Write set exceeds contract | 31 |
+| Receipt `contract_sha` drifts | You delivered a different contract | 32 |
+
+These exit codes are neither an industry standard nor built-in product behavior. They are this lab's teaching convention. What matters is separating clearly which layer a failure belongs to.
+
+This is the true value of worktrees. Both Claude and Codex worktree documentation describes the same underlying fact: isolating code changes in a separate checkout gives patch, diff, receipt, and gate a common physical boundary.
+
+## When not to keep two tracks
+
+A dual-track workflow is not free. It adds:
+
+- One contract.
+- At least two receipts.
+- One deterministic gate.
+- Possibly one independent reviewer.
+
+These situations usually do not justify it:
+
+- You are changing a single-file task manually completable in five minutes.
+- You have no test or build command and can only say “it looks right.”
+- You cannot yet state allowed paths or forbidden actions.
+- The two tools will still write the same file, without a merge gate.
+- A failure in one lane would change no execution strategy and only create useless logs.
+
+Another common misconception is treating Codex desktop's Handoff UI as a synonym for this article's contract. Both build on Git worktrees, but their problem spaces differ:
+
+- Product Handoff UI handles safely moving tasks and code between Local and Worktree.
+- This article's contract freezes boundaries across tools, distinguishes receipts, and defines a gate.
+
+They are related, but not equal.
+
+## Exercise: write a card for your next dual-track handoff
+
+Take a bug you would genuinely give to an agent and, before running tools, write this card:
+
+```yaml
+goal: behavior to fix
+baseline_sha: commit at handoff
+allowed_paths:
+forbidden_paths:
+verify_command:
+healthy_requires:
+degraded_requires:
+claim_blockers:
+```
+
+Then ask only three questions:
+
+1. If the first lane gets no model result at all, do I have a distinct health summary rather than a fabricated diagnosis receipt?
+2. If the second lane changes README, can I reject it mechanically rather than debate whether it is “just a small extra change” afterward?
+3. If somebody claims `dual_track_complete`, can the gate prove immediately that receipts are incomplete?
+
+If you can answer all three reliably, the dual-track workflow has taken shape.
+
+Completion criteria are best written as a checklist rather than a feeling:
+
+- Baseline SHA is frozen.
+- Allowed paths / forbidden paths are frozen.
+- At least one fastest acceptance command can run.
+- Health receipt and completion receipt are distinct.
+- The gate reliably exits nonzero when a receipt is missing.
+
+## Sources and further reading
+
+- Official documentation: [Run parallel sessions with worktrees](https://code.claude.com/docs/en/worktrees)
+- Official documentation: [Configure permissions](https://code.claude.com/docs/en/permissions)
+- Official documentation: [Create custom subagents](https://code.claude.com/docs/en/sub-agents)
+- Official documentation: [Manage sessions](https://code.claude.com/docs/en/sessions)
+- Official documentation: [Codex Worktrees](https://learn.chatgpt.com/docs/environments/git-worktrees)
+- Official documentation: [Codex code review](https://learn.chatgpt.com/docs/code-review)
+- Official documentation: [Custom instructions with AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
+- Official documentation: [Prompting](https://learn.chatgpt.com/docs/prompting)
+- Secondary Chinese thematic map: [Claude Code Orange Book](https://github.com/alchaincyf/claude-code-orange-book)
+- Secondary Chinese thematic map: [Codex Orange Book](https://github.com/alchaincyf/codex-orange-book)
+
+Official material supports the current behavior in this article regarding worktrees, permissions, sessions, review, `AGENTS.md`, and prompt boundaries; related pages were verified on 2026-07-12. The two Orange Books remain only Chinese thematic maps with attribution and links, not authorities for current product facts; both repository READMEs currently declare [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). This article's `handoff contract`, `dual_track_complete`, `degraded_single_lane`, and corresponding gate exit codes are LearnPrompt Editorial Team operating models, not official terminology for a product-native UI.

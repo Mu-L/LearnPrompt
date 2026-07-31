@@ -1,0 +1,38 @@
+---
+title: "Agent Engineering Tutorial Path: Build Reliable Agent Systems"
+description: Learn how to locate an agent's real failure point across instructions, capabilities, constraints, memory, feedback, and orchestration.
+sidebar:
+  order: 0
+difficulty: intermediate
+updated_from: "2026-07"
+author: LearnPrompt editorial team
+verified_at: "2026-07-31"
+reading_time: 8 minutes
+legacy_status: current
+---
+
+When an agent does the wrong thing, the cause is rarely only model intelligence. Whether rules were read, tools were available, permissions overstepped, state was lost, and feedback reaches the next round all shape the result.
+
+## Start with the problem you have
+
+| What is happening now | Read first | Your first verifiable result |
+| --- | --- | --- |
+| Your agent can act but is not reliable | [The five components of a harness](./what-is-harness/) | A system review organized by component |
+| Your agent keeps missing project rules | [The instruction layer](./instruction-layer/) | An instruction surface that can be read and audited |
+| Your agent repeatedly forgets verified state | [The memory layer](./memory-layer/) | A state record usable across rounds |
+
+## A reusable learning route
+
+1. First distinguish model reasoning failures from missing instructions, tools, permissions, state, or an acceptance contract.
+2. Use [the constraint layer](./constraint-layer/) to state actions that must not be crossed and put risky steps behind explicit confirmation gates.
+3. Then use [the feedback layer](./feedback-loop/) to carry tests, review, and real-environment signals into the next round instead of collecting only a message that says "done."
+
+## What to keep after reading
+
+- A map of instructions, capabilities, constraints, state, and orchestration in the current agent system.
+- One failure hypothesis that a command, fixture, or manual review can verify.
+- A feedback path that can stop, record, and continue after an anomaly.
+
+## Continue from here
+
+When you need to connect multiple roles and long tasks, continue with [the orchestration layer](./orchestration-layer/). If the issue is simply writing code with an agent for the first time, return to the [AI Coding Practice Path](../ai-coding/).

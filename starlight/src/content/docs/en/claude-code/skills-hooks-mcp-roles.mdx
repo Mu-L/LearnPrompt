@@ -1,0 +1,207 @@
+---
+title: "How to Choose Skills, Hooks, and MCP: Triage with Three Questions Instead of Mixing Them Together"
+description: Choose the right extension mechanism using three questions about repeated workflows, guarantees at event timing, and external systems and data; learn when to combine them and when not to use MCP.
+sidebar:
+  order: 5
+difficulty: intermediate
+source_repo: alchaincyf/claude-code-orange-book
+source_url: https://github.com/alchaincyf/claude-code-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-11"
+reading_time: 14 min
+research_path: research/articles/skills-hooks-mcp-roles
+showcase_path: research/articles/skills-hooks-mcp-roles/showcase
+showcase_status: verified
+quality_score: 94
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Intermediate | 14 min | 2026-07-11 | LearnPrompt Editorial Team |
+
+You already know how to write `CLAUDE.md`, and you have put a few project rules in `.claude/rules`. Then one day the requirements change: you want Claude to generate release notes by the same steps every time, put a checkpoint in front of every `git push`, and let it read `LP-42` in your issue tracker directly instead of making you paste its contents into the chat box.
+
+So you open the documentation, see the three terms Skill, Hook, and MCP, and start wondering: what exactly is the difference? Can you just pick any one and make do? At this point, many people make the most expensive choice—wrapping everything in MCP, or putting a large block of business logic into a Hook. The flow may run, but every added capability brings another process to maintain and another troubleshooting step.
+
+The problem is not that you do not know how to use one mechanism. It is that you lack a ruler for deciding which kind of need you have. This article gives you three decision questions so you know whether to create a Skill, configure a Hook, or connect MCP before you start.
+
+## What You Will Be Able to Do
+
+You will learn to triage any extension need with three questions:
+
+1. Does this need access to an external system or data? If so, use MCP.
+2. Does this need a guarantee at a particular event timing? If so, use a Hook.
+3. Is this the same set of steps executed repeatedly? If so, use a Skill.
+
+You will also learn how the three mechanisms can be combined legitimately, and when MCP is the wrong choice. Finally, you will see a Showcase called `release-workbench`: the same real task (generating release notes from an issue plus a diff) demonstrated with all three mechanisms, along with a misuse counterexample rejected by a design gate. Every conclusion is backed by an exit code.
+
+![Requirements classification decision tree: first ask about external data, then event timing, then repeated workflows; the bottom breaks down valid combinations and red lines for misuse](/images/articles/skills-hooks-mcp-roles/mechanism-decision-tree.svg)
+*Caption: Read the diagram from top to bottom and eliminate first—rule out the heaviest MCP first, then the next-heaviest Hook, and leave only repeated workflows for the lightest Skill. The lower-left section shows legitimate combinations of the three mechanisms; the lower-right shows each misuse red line, paired with a mechanical counterexample in the Showcase.*
+
+:::note[The three-question order is a teaching synthesis, not an official standard]
+The official documentation explains Skills, Hooks, and MCP separately; it does not provide one unified decision tree. This article organizes them into a three-question model based on elimination: start by ruling out the option with the heaviest boundary cost, so you do not put a simple need into the most expensive mechanism from the outset.
+:::
+
+## The Three Decision Questions: Rule Out the Heaviest Option First
+
+Why ask in the order MCP, Hook, Skill instead of the reverse? Because the boundary costs of the three mechanisms differ dramatically.
+
+Skill is the lightest: a Markdown file is enough, and it only manages a workflow. Hook is in the middle: it can intercept at an event timing, but its script cannot see conversation context. MCP is the heaviest: it creates an inter-process channel between Claude Code and an external system, bringing process, trust, and credential boundaries with it.
+
+If you start with the lightest question (whether it is a repeated workflow), almost every requirement will answer yes—because most work does have fixed steps. You will then habitually stuff requirements such as connecting to a database or blocking a push into a Skill, only to discover that Skills can neither guarantee timing nor connect to external systems.
+
+Starting with elimination is much cleaner: first ask whether you need external data and identify the real MCP cases; then ask whether you need a timing guarantee and identify the Hook cases; then hand the remaining purely local repeated workflows to Skills. All three questions can be yes at the same time; that is when you combine mechanisms, but each yes maps to a clear responsibility and nothing is ambiguous.
+
+## Skill: Turn Repeated Workflows from "Always Loaded" into "Called on Demand"
+
+You may ask: I can already write steps in `CLAUDE.md`; why do I need a Skill?
+
+The key difference is loading time. `CLAUDE.md` enters the context in full at the start of every session; the longer it is, the more context-window space it continuously occupies. A Skill is different: its body loads only when it is used. The official documentation puts it plainly: a skill's body loads only when it's used, so long reference material costs almost nothing until you need it. In other words, a several-hundred-line operating manual written in `CLAUDE.md` is carried in every turn; written as a Skill, it has almost no idle cost and is paid for only when needed.
+
+The official rule of thumb is also easy to remember: when a section in `CLAUDE.md` has grown from a fact into a workflow (a procedure rather than a fact), extract it into a Skill. Keep facts in `CLAUDE.md`; move workflows into Skills.
+
+A Skill is one directory plus one entry file. Its minimum structure looks like this:
+
+```text
+.claude/skills/release-brief/
+└── SKILL.md
+```
+
+`SKILL.md` has two parts: YAML frontmatter between `---`, and the Markdown body that enters context after invocation. The frontmatter fields themselves are optional; `description` is the matching signal the official documentation recommends providing, and `when_to_use` can supplement the trigger scenario. `name` is usually only a display name; the actual command name for a project Skill comes from the directory name, so it must not be written as a trigger condition. In this article's Showcase, the Skill that fixes the task of “generating release notes from an issue plus a diff” has a body consisting of five fixed steps and an output contract:
+
+```markdown
+---
+name: release-brief
+description: 从一个 issue 和一段 diff 生成结构化发布摘要。
+---
+
+## 固定步骤
+1. 读 issue：提取标题、问题描述与验收标准。
+2. 读 diff：列出被改动的文件与关键函数。
+3. 归类改动：区分缺陷修复、功能新增还是纯重构。
+4. 评估风险：指出回归面与需要人工确认的点。
+5. 写验证步骤：给出可复制的复现或回归命令。
+```
+
+Whether a Skill can truly be reused depends on whether it has a mechanically checkable contract. Writing steps alone is not enough; you also need to verify whether the output is acceptable. The Showcase's `check-skill-contract.mjs` does exactly this: it reads `SKILL.md`, confirms that all five workflow steps are present, then takes generated release-notes JSON and checks that all five fields—`issue`, `summary`, `change_type`, `risk`, and `verification`—are included. A missing field produces a nonzero exit. That is how a “repeated workflow” becomes a reusable, verifiable asset instead of a nice-looking description.
+
+## Hook: Add a Mechanical Guarantee at an Event Timing
+
+Writing “please do not push casually” in `CLAUDE.md` is a soft reminder. The model will probably follow it, but there is no mechanical guarantee—it is only one sentence in a prompt. If what you need is “there must be a checkpoint before a push, and it must not depend on whether the model remembers the rule,” use a Hook.
+
+The core of a Hook is event timing. PreToolUse triggers before a tool call actually executes (official wording: Before a tool call executes. Can block it.). When triggered, your script receives JSON on standard input containing `tool_name` and `tool_input`:
+
+```json
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": { "command": "git push origin main" }
+}
+```
+
+After reading it, the script can state its decision. To block, return `permissionDecision: "deny"` in `hookSpecificOutput`:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "git push 属于对外发布动作，必须人工执行。"
+  }
+}
+```
+
+There is a particularly easy trap here, worth stressing separately. Suppose a command is the safe `npm test`, and your script produces no output and exits with exit 0. What happens? Many people think this means “approved and allowed.” The official documentation explicitly rejects that interpretation: Exit code 0 with no output means the hook has no decision to report … The hook can deny the call, but staying silent doesn't approve it. A silent exit means “this Hook makes no decision”; control returns to Claude Code's normal permission flow, and the permission system decides whether to ask you about this call. A Hook can deny, but silence is never pre-approval.
+
+This semantic boundary determines what a Hook should and should not do. It is good at making a binary judgment at a definite timing: block, or make no decision. It is not suitable for carrying complex business logic—the script receives only event JSON, cannot see conversation context, cannot reason, and is hard to debug when something goes wrong. Putting a whole business orchestration into a Hook means using a hook with no context and no memory for work that should be handled by a Skill or the model.
+
+## MCP: Access External Systems Across Processes—and Three Boundaries
+
+The first two mechanisms stay local: Skill manages workflows, and Hook manages timing. MCP enters only when the need becomes “I need to read data in another system.”
+
+MCP (Model Context Protocol) connects Claude Code to external tools, databases, and APIs. The official trigger signal is specific: when you find yourself repeatedly copying data into chat from another tool, connect an MCP server so Claude can read that system directly instead of relying on manual transfer. This article's Showcase is exactly that scenario—rather than manually copying the contents of issue `LP-42`, a stdio server provides them.
+
+MCP supports several transport methods: HTTP (officially recommended for remote services), stdio (local processes), SSE (deprecated), and WebSocket. This article uses only the simplest, stdio: the server is a local process on your machine, and Claude communicates with it through standard input and output using JSON-RPC.
+
+Power comes at a cost. Every MCP server you add crosses three boundaries at once:
+
+- Process boundary: the server is an independent process—one more thing to start, maintain, and potentially crash.
+- Trust boundary: you must trust every server. The official documentation specifically warns that servers which fetch external content can expose you to prompt injection risk; project-level `.mcp.json` also requires your explicit approval before it takes effect.
+- Credential boundary: servers often hold API keys or OAuth tokens. Those credentials live in the server process and become a new attack surface.
+
+MCP is therefore not “a more advanced Skill”; it is a channel to the outside world. The cost of the three boundaries is worth paying only when you truly need to cross that wall. If the data is local and the workflow is fixed, forcing MCP onto it only creates all three burdens for nothing.
+
+## Showcase: release-workbench Uses One Task to Demonstrate All Three Mechanisms
+
+To make the boundaries of the three mechanisms visible, the Showcase puts them on one real task: generate structured release notes from issue `LP-42` plus a diff. One task, four proofs, each with an exit code.
+
+Reproduction command (from the repository root):
+
+```bash
+node research/articles/skills-hooks-mcp-roles/showcase/release-workbench/scripts/release-gate.mjs
+```
+
+Actual output on 2026-07-11 (key lines):
+
+```text
+PASS [A] Skill 契约检查 (exit 0)
+PASS [B1] Hook 对 git push 返回 deny (exit 0)
+PASS [B2] Hook 对 npm test 不作决定/静默放行 (exit 0)
+PASS [C] MCP 子进程取回外部 issue LP-42 (exit 0)
+PASS [D1] 机制闸门放行 Skill 声明 (exit 0)
+PASS [D2] 机制闸门拒绝"本地固定流程包装成 MCP" (exit 3)
+SUMMARY 6/6 项符合预期
+```
+
+Each of the four proofs corresponds to the responsibility of one mechanism:
+
+- **[A] Repeated workflow → Skill**: `check-skill-contract.mjs` reads `SKILL.md` to confirm the five workflow steps, then validates that one set of release notes meets the `issue/summary/change_type/risk/verification` contract. It passes with exit code 0.
+- **[B] Dangerous timing → Hook**: fixture JSON is fed to `pre-tool-use.mjs` through real child-process stdin. The `git push` event receives `permissionDecision: "deny"`; the `npm test` event has empty stdout and exit 0—that is, it silently makes no decision and returns to the normal permission flow rather than approving it.
+- **[C] External issue → MCP**: `client-harness.mjs` starts `issue-server.mjs` as a real child process, then uses stdin/stdout to sequentially run `initialize`, `tools/list`, `tools/call get_issue`, and `resources/read`, retrieving `LP-42` data. Exit code 0.
+- **[D] Counterexample → Rejected by the design gate**: the mechanism gate `mechanism-gate.mjs` declares the same purely local fixed workflow as MCP. Because it accesses no external system or data, the gate rejects it with exit code 3 and indicates that the correct answer is to make it a Skill.
+
+:::caution[What this Showcase does not prove]
+`issue-server.mjs` implements only the minimum JSON-RPC methods needed for the demonstration (initialize / tools/list / tools/call / resources/read) and does not use the official SDK. It **verifies only this article's minimum JSON-RPC boundary; it does not claim full MCP conformance, nor does it represent Claude Code's live integration behavior**. The Hook is triggered by fixture events rather than live Claude Code events; the mechanism gate is this article's teaching model, not an official tool. What is proved here is the mechanism boundary and evidence chain, not an online model run that generates release notes.
+:::
+
+## Boundaries and Anti-Patterns: When Not to Use MCP
+
+All three questions can be yes; that is when you should combine them—but the prerequisite is that each keeps to its boundary. A legitimate combination looks like this: one step in a Skill calls an MCP tool to retrieve external data (Skill manages the workflow; MCP manages the channel); a Hook intercepts a call to an MCP tool in PreToolUse (Hook manages timing; MCP manages the connection). The three lines of responsibility do not intrude on one another.
+
+The real trouble comes from confusing boundaries. Each anti-pattern below maps to a specific failure:
+
+- **Wrapping a purely local fixed workflow in MCP.** This is the most common and most expensive mistake. Once logic that can run entirely locally and touches no external system is put behind MCP, it creates process, trust, and credential boundaries out of thin air. The Showcase's mechanism gate blocks this declaration with exit code 3. The rule is simple: if the answer to the first question (do you need external data?) is no, MCP should not appear.
+- **Writing complex business logic in a Hook.** A Hook receives only event JSON; it has no conversation context, cannot reason, and is hard to debug. It is suitable for binary interception at a timing, not as a business orchestrator. Give multi-step judgment work to a Skill or the model.
+- **Treating a Skill as CLAUDE.md.** If content is a fact or global constraint needed on every turn, put it in `CLAUDE.md` or `.claude/rules`. Forcing it into a Skill instead bypasses the benefit of on-demand loading, or means it simply will not be used. A Skill's value is in workflows that are repeatedly invoked, not in always being present.
+- **Treating Hook silence as approval.** This is a security trap: you think configuring a Hook has stopped a dangerous operation, but only an explicit `deny` can block it; silence merely makes no decision. Any operation that must be blocked must return an explicit denial.
+
+In one sentence: MCP solves “the data is outside the wall,” not “the workflow needs reuse” or “the operation needs interception.” If there is nothing outside the wall to retrieve, do not build that channel.
+
+## Exercise: Triage Your Extension Need with the Three Questions
+
+Pick one capability you recently wanted to add to Claude Code. Walk through the table below, filling in only yes or no:
+
+```yaml
+需求: ____________________
+Q1 需要访问外部系统或数据吗:  是 -> MCP / 否 -> 继续
+Q2 需要在某个事件时点做保证吗: 是 -> Hook / 否 -> 继续
+Q3 是同一套步骤反复执行吗:     是 -> Skill / 否 -> 写进 CLAUDE.md
+组合判断: 若多个为是，写清每个"是"对应哪条机制职责
+```
+
+Acceptance criterion: looking at your own answers, you can state the one thing each mechanism is responsible for, and there is no contradiction such as “the first question is no but I chose MCP.” If you chose a combination, check whether the three responsibility lines invade one another—whether a Skill has secretly taken on timing guarantees, a Hook has been filled with business logic, or MCP has wrapped a local workflow.
+
+To verify further, run this article's Showcase, especially the counterexample: change `declared_mechanism` in `local-flow-as-mcp.json` back to `skill`, and watch the gate change from REJECT (exit 3) to ACCEPT (exit 0). You will feel directly that mechanism selection is not a style preference; it is right or wrong in a way that can be mechanically determined.
+
+## Sources and Further Reading
+
+- [Claude Code official documentation: Skills](https://code.claude.com/docs/en/skills)
+- [Claude Code official documentation: Hooks](https://code.claude.com/docs/en/hooks)
+- [Claude Code official documentation: MCP](https://code.claude.com/docs/en/mcp)
+- [Claude Code official documentation: Features overview](https://code.claude.com/docs/en/features-overview)
+- [Claude Code Orange Book](https://github.com/alchaincyf/claude-code-orange-book)
+- [Research package and runnable Showcase for this article](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/skills-hooks-mcp-roles)
+
+The official documentation is the primary source supporting all current product behavior in this article; it was checked on 2026-07-11 with Claude Code 2.1.206. The Orange Book is retained as a Chinese secondary topical map with attribution under its CC BY-NC-SA 4.0 license. This article's three-question decision model, argument, and Showcase have all been independently reconstructed and reviewed; they do not represent an official unified classification.

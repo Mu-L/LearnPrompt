@@ -1,0 +1,283 @@
+---
+title: "The Five Components of a Harness: Making Agents Not Just Capable, but Reliable to Completion"
+description: Audit Agent systems with instructions, capabilities, constraints, state, and orchestration, then run a minimal Harness with five verifiable checks.
+sidebar:
+  order: 1
+difficulty: intermediate
+source_repo: alchaincyf/harness-engineering-orange-book
+source_url: https://github.com/alchaincyf/harness-engineering-orange-book
+updated_from: 2026-07
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-10"
+reading_time: 13 minutes
+research_path: research/golden-samples/harness-five-components
+showcase_path: research/golden-samples/harness-five-components/showcase/minimal-harness
+showcase_status: verified
+quality_score: 92
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Intermediate | 13 minutes | 2026-07-10 | LearnPrompt Editorial Team |
+
+Why can the same model only offer advice in a chat box, but locate files, modify code, run tests, and keep fixing failures once it enters a mature repository?
+
+The difference is not just the prompt. Beyond the model, an entire system determines what it can see, what it can do, what it must never do, how it remembers the previous round, and who decides when the task is truly complete. That system is the **Harness**.
+
+> The model proposes the next step; the Harness decides whether that step can execute safely, leave evidence, and proceed to the next step.
+
+## What you will be able to do after reading
+
+You will learn to audit any Agent system with five questions:
+
+1. How should it work?
+2. What can it actually call?
+3. Which boundaries must not be crossed?
+4. Which states and evidence need to be retained?
+5. Who is responsible for advancing, accepting, and stopping?
+
+Finally, you will run a minimal Harness made of just a few files and see all five deterministic checks pass.
+
+![The five Harness components connect rules, tools, boundaries, state, and control into a verifiable execution system](/images/articles/what-is-harness/harness-five-components.svg)
+*Caption: The five components are not a parallel feature checklist, but a closed loop from rules and constraints to execution and acceptance; without any one of them, an Agent may “do work without being able to prove it did it right.”*
+
+:::note[This is an operating model]
+There is no single industry standard for the “five components of a Harness.” Different sources emphasize instructions, tools, permissions, feedback, memory, evaluation, or orchestration. This article organizes them into a five-component model that is easy to inspect and teach, and makes the synthesis explicit.
+:::
+
+## Start with a failure: a well-written prompt can still break the task
+
+Suppose you only tell an Agent:
+
+```text
+Fix the issue on the login page, maintain code quality, and test after completion.
+```
+
+The sentence sounds reasonable, but it does not answer:
+
+- Where are the login page and related rules?
+- Can the Agent run browser, database, or network commands?
+- May it touch `.env`, production accounts, or publishing actions?
+- If tests fail, where does the next round continue from?
+- Who decides what “test after completion” means, and can it still declare completion if tests fail?
+
+Adding ten more paragraphs of adjectives will not fill these engineering gaps. You need to connect natural-language intent to a real environment.
+
+## Five components, one audit table
+
+| Component | The question it answers | Minimum artifact | Typical failure when missing |
+| --- | --- | --- | --- |
+| Instructions | How should it work? | `AGENTS.md`, task brief | Changes without reading the rules; scope keeps drifting |
+| Capabilities | What can it actually do? | Tool list, command allowlist, interfaces | Verbally permitted but unable to execute, or too many tools are exposed |
+| Constraints | What must it not do? | Sandbox, permissions, deny rules, approvals | The prompt says “be careful,” but the system still allows it |
+| State | What must the next step remember? | State, artifacts, logs, feedback | It guesses anew every round; failure evidence is lost |
+| Orchestration | Who advances, accepts, and stops? | State machine, worker/evaluator, stop condition | It writes and judges itself, then retries forever |
+
+These five are not five isolated files. The quality of a production Harness depends on whether they are genuinely connected to the execution path.
+
+## 1. Instructions: provide a map, not an encyclopedia
+
+The instruction layer is more than “you are a senior engineer.” It should tell the Agent:
+
+- The project goal and current task;
+- The entry points it must read before starting;
+- The permitted scope of changes;
+- The fastest acceptance command;
+- How to report results.
+
+OpenAI’s Harness engineering practice emphasizes that repository entry points should be like a map, not a thousand-page manual. The problem with long documents is not that the model cannot finish reading them, but that rules are prone to repetition, conflict, and staleness. Entry files handle navigation, while specific knowledge stays in documentation and tests close to the code.
+
+An effective minimal instruction can be only four lines:
+
+```md
+- Read the README, capability list, and constraints first.
+- Make only the smallest change required by the task.
+- Run the specified verification script after changes.
+- Report files, results, and unresolved uncertainties.
+```
+
+Short does not mean vague. Every line must map to a real resource in the environment.
+
+## 2. Capabilities: more tools do not necessarily mean more strength
+
+The capability layer defines what information an Agent can read, which resources it can modify, which commands it can run, and whether it can access the network or external systems.
+
+If a documentation Agent only needs to read Markdown, write drafts, and run link checks, there is no reason to also expose cloud deletion, message sending, and arbitrary shell access. The capability set should be derived from the task:
+
+```json
+{
+  "read": ["README.md", "docs/**/*.md"],
+  "write": ["docs/**/*.md"],
+  "commands": ["npm run check:docs"],
+  "network": false
+}
+```
+
+Give it one necessary tool too few and the Agent gets stuck; give it one high-risk tool too many and the blast radius of failure expands. The goal of capability design is not maximization, but **just enough to complete and verify the task**.
+
+## 3. Constraints: turn “do not” into system behavior
+
+“Do not touch secrets” in a prompt is only a soft reminder. Real constraints need to become:
+
+- Path allow/deny rules;
+- Read-only or workspace-write sandboxes;
+- Command approvals;
+- Human gates for network access, publishing, and external messages;
+- Lint, type, and architecture tests.
+
+For example:
+
+```json
+{
+  "denied_paths": [".env", "**/*.key", "**/credentials.*"],
+  "denied_actions": ["delete", "push", "publish"],
+  "require_verification": true
+}
+```
+
+This JSON is only a declaration; it becomes a security boundary only when the executor actually reads and enforces it. **Documentation explains intent; the system enforces refusal.**
+
+## 4. State: retain the facts the next round needs, not every conversation
+
+Long tasks often span multiple turns, processes, or even different Agents. At minimum, the state layer should retain:
+
+- The current goal and completion criteria;
+- Completed and incomplete steps;
+- The last verification result and failure evidence;
+- Important human decisions;
+- Paths to artifacts that can be read to continue.
+
+State does not mean stuffing the entire chat history back into the context. Good state is a compressed index of facts, with detailed evidence kept in separate logs, diffs, or test reports. This lets the next round resume quickly while tracing the original basis when needed.
+
+## 5. Orchestration: separate “doing the work” from “deciding it was done correctly”
+
+Orchestration is responsible for step order, role division, failure loops, and stop conditions. A minimal flow can be:
+
+```text
+inspect → plan → implement → verify → report
+```
+
+Anthropic’s research on long-running Agents separates planner, generator, and evaluator, and emphasizes structured artifacts. The reason is simple: generators can easily mistake “I have finished writing” for “the result meets the bar.” An evaluator can be another model, or it can be unit tests, schema validation, static checks, or a human reviewer.
+
+Stop conditions must also be explicit: end only when all checks pass; record evidence and return to planning on failure; escalate to a human after consecutive failures or a budget limit instead of looping indefinitely.
+
+## Showcase: a minimal Harness with five checkable components
+
+The example directory is:
+
+```text
+research/golden-samples/harness-five-components/showcase/minimal-harness/
+├── AGENTS.md
+├── capabilities.json
+├── constraints.json
+├── memory.md
+├── orchestration.json
+└── scripts/verify-harness.mjs
+```
+
+After entering the directory, run:
+
+```bash
+node scripts/verify-harness.mjs
+```
+
+Actual output from 2026-07-10:
+
+```text
+PASS instructions: AGENTS.md
+PASS capabilities: capabilities.json
+PASS constraints: constraints.json
+PASS memory: memory.md
+PASS orchestration: orchestration.json
+PASS summary: 5/5 harness components verified
+```
+
+The verification script does not “ask the model whether the configuration feels complete”; instead, it reads files, parses JSON, checks required fields, and exits with a non-zero status when something is missing. The complete code and raw results from the same directory are kept in [Research and Showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/golden-samples/harness-five-components/showcase/minimal-harness).
+
+### What this example proves
+
+- The five components can be represented as observable, checkable artifacts.
+- Acceptance can be independent from the executor.
+- Missing components can surface early instead of waiting until a task fails to guess at the cause.
+
+### What it does not prove
+
+- Writing deny rules in JSON does not mean the operating system will actually block commands.
+- The presence of all five components does not mean their content is designed correctly.
+- Passing verification once does not mean real tasks will remain reliable over time.
+- Not connecting to the network does not automatically make a production environment secure.
+
+To upgrade the example to a production Harness, connect capabilities and constraints to real tools, sandboxes, CI, audit logs, and human approval.
+
+## How to apply the five components to a real task
+
+Take “have an Agent update a tutorial and submit a reviewable diff” as an example:
+
+### Instructions
+
+Specify the audience, article goal, files that may be changed, style rules, and delivery format. Require research before writing, and do not allow old material to be treated as current fact.
+
+### Capabilities
+
+Allow reading the repository, official documentation, and specified materials; allow modifying the target MDX and research package; allow running the showcase and site build.
+
+### Constraints
+
+Prohibit publishing, pushing, changing account configuration, or reading secrets; citations must point to primary sources; unrelated changes in the working tree must not be overwritten.
+
+### State
+
+Save the brief, horizontal research, vertical research, evidence ledger, raw experiments, and review conclusions. The next editor should not need to guess from chat history what happened.
+
+### Orchestration
+
+Research → experiment → writing → independent fact review → revision → showcase test → site build. If any blocking item remains open, the article must not be marked `verified`.
+
+The golden sample you are reading was produced through this very chain.
+
+## Common anti-patterns
+
+### Write every failure back into the prompt
+
+If the problem is a missing tool, an unwritable path, or absent tests, adding “please check carefully” will not change the environment. First determine which component the failure belongs to.
+
+### Many rules, but no mechanical checks
+
+“Architecture must remain clean” is not executable. Break it into dependency direction, directory boundaries, lint, or structural tests to create feedback.
+
+### Save all memory without compressing state
+
+More context does not necessarily mean better continuity. Save decisions, results, evidence paths, and unfinished items instead of repeating the conversation.
+
+### The worker declares its own completion
+
+The generator’s summary can serve as a clue, but should not replace tests, diff review, or an independent evaluator.
+
+### Build a complex multi-Agent system from the start
+
+Anthropic’s engineering experience also recommends keeping the Harness simple. First make one worker reliably finish one small task within clear boundaries; then add parallelism, routing, and long-term memory.
+
+## Exercise: give your Agent a five-minute audit
+
+Find a task that failed recently and fill in this table:
+
+```yaml
+instructions: Where are the entry rules, and do they conflict with each other?
+capabilities: Are the necessary tools available, and which unnecessary high-risk tools are present?
+constraints: Which boundaries are enforced by the system, and which are merely reminders?
+state: What evidence did the last failure leave, and where does the next round resume?
+orchestration: Who verifies, which step follows a failure, and when does it stop?
+```
+
+Then fix only the weakest item and rerun the same task. Do not change the model, prompt, tools, and tests all at once, or you will not know what actually worked.
+
+## Sources and further reading
+
+- [OpenAI: Harness engineering](https://openai.com/index/harness-engineering/)
+- [Anthropic: Effective harnesses for long-running agents](https://www.anthropic.com/engineering/harness-design-long-running-apps)
+- [Anthropic: Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)
+- [Harness Engineering Orange Book](https://github.com/alchaincyf/harness-engineering-orange-book)
+- [This article’s research package and runnable example](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/golden-samples/harness-five-components)
+
+The Orange Book provides a Chinese topic map, and its repository requires author attribution when cited; this article retains the source and attribution. The five-component classification is LearnPrompt’s operational synthesis of multiple primary sources, not a single industry standard.

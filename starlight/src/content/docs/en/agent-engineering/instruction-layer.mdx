@@ -1,0 +1,188 @@
+---
+title: "The Instruction Layer: Translate Intent into a Project Map an Agent Can Execute"
+description: Use five executable dimensions—goal, scope, order, acceptance, and conflict priority—to turn an instruction from adjectives into a project map that can be accepted.
+sidebar:
+  order: 2
+difficulty: intermediate
+updated_from: "2026-05"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-11"
+reading_time: 13 minutes
+research_path: research/articles/instruction-layer
+showcase_path: research/articles/instruction-layer/showcase/instruction-map
+showcase_status: verified
+quality_score: 93
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Intermediate | 13 minutes | 2026-07-11 | LearnPrompt Editorial Team |
+
+You wrote a CLAUDE.md for an Agent, added “you are a senior engineer” and “work carefully and keep quality high,” yet it still starts without reading the rules, keeps expanding the scope, and finally declares “done” with no one able to judge whether it is correct.
+
+Most people respond by adding more adjectives. But wording was never the problem. The instruction layer must translate the intent in your head into a project map an Agent can execute and that can be accepted: what the result should be, which files it may touch, in which order it should work, which command accepts it, and which concern wins when dimensions conflict. If that translation is incomplete, no polite sentence can fill the engineering gap.
+
+## What you will be able to do after reading
+
+You will learn to audit and rewrite any Agent instruction using five executable dimensions:
+
+1. Goal: what it should become, in a form that can be judged.
+2. Scope: which files it may touch.
+3. Order: what to read first, do next, and validate last.
+4. Acceptance: which command decides completion.
+5. Conflict priority: who wins when dimensions conflict.
+
+You will also see the distinct roles of the instruction layer and the capability, constraint, state, and orchestration layers, then run a minimal repository to observe a vague instruction fail acceptance and the same acceptance pass after executable instructions are supplied.
+
+![The five dimensions on the left each map to a real resource; on the right, a conflict-priority ladder has safety constraints, explicit task instructions, and general style preferences](/images/articles/instruction-layer/instruction-map-and-conflict.svg)
+*Caption: Each dimension on the left must land on a locatable real resource; the right side decides what overrides what when dimensions conflict. Vague instructions lack both.*
+
+:::note[This is an operating model]
+The “five executable dimensions” and “priority ladder” operationalize official advice to be specific and verifiable for auditing and teaching. They are not official terms from any product. Product behavior is checked against official primary documentation; see the dates at the end.
+:::
+
+## Start with a failure: the instruction exists, but the task still drifts
+
+Suppose CLAUDE.md contains only:
+
+```text
+Improve the format-date module so dates are easier to read, and test it after you finish.
+```
+
+The sentence sounds unobjectionable, but answers none of the executable questions. Does “easier to read” mean a human-readable long string or a machine-parseable format? May it also change tests and other files? Which command constitutes “test it,” and how many cases must pass? If a hidden acceptance test in the module requires `2026-07-11` while the instruction implies “more readable,” the two demands collide—and this instruction does not say which wins.
+
+The Agent therefore chooses either side. This is not disobedience. Claude Code documentation explicitly positions CLAUDE.md as context rather than enforced configuration and says that, when rules conflict, the model may choose either. The root cause of drift is an unresolved conflict left by the instruction layer, not insufficiently earnest wording.
+
+## The instruction layer translates; it does not decorate prose
+
+Taken to its conclusion, official advice for effective instructions answers five locatable questions. This table is the smallest checklist for auditing one:
+
+| Dimension | Question it answers | Counterexample (adjective) | Positive example (a real resource) |
+| --- | --- | --- |
+| Goal | What should it become? | Make the code more elegant | `formatDate` returns `YYYY-MM-DD` |
+| Scope | Which files may change? | Change related places | Change only `src/format-date.mjs` |
+| Order | What is the sequence? | Complete it carefully | Read tests → implement → run acceptance |
+| Acceptance | Who decides? | Test it when done | All three `node --test` cases pass |
+| Conflict priority | Who wins on a clash? | Balance it holistically | Tests take precedence on conflict |
+
+The adjectives in the left column cannot be mechanically checked; every cell on the right can land on a real file, command, or judgment. Official contrastive examples make the same point: “Run `npm test` before committing” is better than “Test your changes,” and “Use 2-space indentation” is better than “Format code properly.” Executable means each dimension can point to a concrete resource.
+
+## Put all five dimensions on real resources
+
+**Goal** must be judgeable rather than praiseworthy. “Better” is always true and never acceptable; “return `YYYY-MM-DD`” either holds or does not. Write the goal as a decidable completion state so later acceptance has an object.
+
+**Scope** must point to specific paths. “Change related files” is equivalent to saying nothing: the Agent expands the change surface itself, and the failure radius expands with it. “Change only `src/format-date.mjs`” makes going outside it a definite violation.
+
+**Order** must make “read acceptance criteria before changing code” permanent. Much drift happens when an Agent starts guessing an implementation before reading tests. Writing “read `test/`, then implement, then run acceptance” gives it a path that does not get lost.
+
+**Acceptance** must be a command, not a feeling. “Test it when done” hands judgment back to the generator, which is most likely to confuse “I finished writing” with “the result passed.” “All three `node --test` cases pass” makes completion an exit code instead of a subjective claim.
+
+**Conflict priority** is the most often omitted and most fatal dimension. Real engineering inevitably has conflicts; the next section addresses it separately.
+
+## Conflict is a missing-priority problem, not a wording problem
+
+Conflict is normal in Agent engineering, not exceptional. You may have multiple CLAUDE.md files, global and project AGENTS.md files, a vague goal, and hidden acceptance. The system's default conflict resolution is unsafe: Claude Code says it may choose either conflicting rule; Codex concatenates discovered AGENTS.md files from root to leaf, with the nearer one later and therefore higher priority, and drops later content when the merged instructions exceed 32 KiB (the default `project_doc_max_bytes`). Unless you state priority explicitly, the system decides with “either may win” or “nearest wins.”
+
+The instruction layer must turn default behavior into an explicit rule. A stable, useful priority ladder is:
+
+1. Safety and scope constraints (highest): do not overreach, touch secrets, or publish.
+2. Explicit task instructions: this round's goal and acceptance override general preferences.
+3. General style preferences (lowest): pleasant wording, but rejectable by higher-level acceptance.
+
+Escalate to a person only within the same layer. With this ladder, a collision between “make the date easier to read” and “the test requires `2026-07-11`” has one resolution: level 3 yields to level 2, so the test decides. That declaration is often the entire difference between a vague instruction and an executable one.
+
+## How the instruction layer differs from the other four layers
+
+The instruction layer is powerful, but it only explains intent; it does not enforce it. Confuse that boundary and you will cram problems that belong elsewhere into wording.
+
+- The capability layer answers “what can actually be done.” A missing tool or unwritable path is not fixed with more adjectives; add the tool or permission.
+- The constraint layer answers “what must never happen.” Writing “do not touch secrets” in an instruction is only a soft reminder; official guidance says an action must be truly stopped with a PreToolUse hook or sandbox. Instructions explain intent; hooks enforce denial.
+- The state layer answers “what the next round must remember.” Goals and evidence of a previous failure belong to state, not a fresh restatement in every instruction.
+- The orchestration layer answers “who accepts, where failure returns, and when to stop.”
+
+The instruction layer itself has physical limits. CLAUDE.md loads in full on every turn and longer files are followed less reliably; official guidance recommends keeping a single file below 200 lines. When Codex merges project instructions to the default `project_doc_max_bytes` of 32 KiB, it stops adding later files rather than discarding the merged whole. Therefore “put all knowledge in the entry file” is itself an anti-pattern. An entry file should be a navigation map, with detail lowered into nearby documents, `.claude/rules/`, or a Skill—not an encyclopedia.
+
+## Showcase: from a vague instruction to an executable map
+
+To keep “executable” from remaining a slogan, this article includes a minimal repository with no network dependency. It preserves a reproducible before/after comparison: failure when instructions are insufficient, then success when they are completed. See the full directory, commands, and sanitized output in [research and the Showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/instruction-layer/showcase/instruction-map).
+
+The task is a date-formatting function with acceptance specified by a hidden test:
+
+```js
+// test/format-date.test.mjs (excerpt)
+test("returns ISO calendar date YYYY-MM-DD", () => {
+  assert.equal(formatDate(new Date("2026-07-11T09:30:00Z")), "2026-07-11");
+});
+```
+
+First, a deterministic checker decides whether two instruction files can be parsed as executable maps. It does not ask a model “does this read well?” It checks, one by one, whether the five dimensions land on locatable resources. The real result on macOS with Node v24.11.0 on 2026-07-11 was:
+
+```text
+$ node scripts/verify-instruction-map.mjs before/AGENTS.md
+FAIL Goal / FAIL Scope / FAIL Order / FAIL Acceptance / FAIL Conflict priority
+summary: 0/5 dimensions executable   (exit 1)
+
+$ node scripts/verify-instruction-map.mjs after/AGENTS.md
+PASS Goal / PASS Scope / PASS Order / PASS Acceptance / PASS Conflict priority
+summary: 5/5 dimensions executable   (exit 0)
+```
+
+Second, we run the candidate implementation each instruction leads to against the same acceptance. The implementation that follows “make the date easier to read” returns a human-readable string and is rejected by the machine-format assertion:
+
+```text
+$ (cd repo && node --test)   # before-candidate
+✖ returns ISO calendar date YYYY-MM-DD
+  + 'Sat, 11 Jul 2026'
+  - '2026-07-11'
+ℹ pass 1  ℹ fail 2   (exit 1)
+```
+
+After completing executable instructions and declaring “tests take precedence on conflict,” the implementation following them passes all three cases under the same acceptance:
+
+```text
+$ (cd repo && node --test)   # after-candidate
+✔ returns ISO calendar date YYYY-MM-DD
+✔ pads single-digit month and day
+✔ does not mutate the input date
+ℹ pass 3  ℹ fail 0   (exit 0)
+```
+
+This Showcase proves that instruction-layer output can land on real files, commands, and judgments, and that writing conflict priority gives one execution a determinate right or wrong answer. It does not prove that an online model produced either candidate: both were hand-written to represent where vague and precise instructions lead. The reproducible deterministic components are the acceptance harness and its real output, so this article provides no model ranking. The checker only determines whether five dimensions are locatable, not whether their content is wise; a 5/5 instruction can still have the wrong goal.
+
+## When not to use the instruction layer as the solution
+
+The instruction layer is not a master key. Do not revise wording first in these cases:
+
+- Failure comes from a missing tool or insufficient permission. That is the capability layer; “please check carefully” will not make a nonexistent command run.
+- You need a hard stop rather than a reminder. “Never delete the production database” must be enforced with a deny rule, sandbox, or PreToolUse hook; placing it in CLAUDE.md is only a soft constraint.
+- The conflict is at the same priority. If two explicit task instructions conflict, escalate to a person rather than letting a model choose one.
+- Instructions are already too long. Once they exceed the official 200-line recommendation, or merged Codex content reaches the default 32 KiB cap and stops adding files, the problem is overload rather than insufficient detail; subtract and lower detail.
+
+A simple test: if adding one sentence turns an adjective into a locatable resource, it is instruction-layer work. If no amount of prose changes the environment, tool, or enforced boundary, solve it in another layer.
+
+## Exercise: perform a five-dimension audit on your entry file
+
+Find a CLAUDE.md or AGENTS.md you use, plus a recent task it failed to control, and fill in this table:
+
+```yaml
+Goal:      Is it judgeable, or only “better / more elegant”?
+Scope:     Does it name concrete file paths, or merely “related files”?
+Order:     Does it require reading acceptance criteria before acting?
+Acceptance: Is it a runnable command, or merely “test it”?
+Conflict priority: When style preference collides with task acceptance, is the winner explicit?
+```
+
+Any row that cannot answer “which real resource does this land on?” is a suspect dimension for the drift. Strengthen only the thinnest dimension, rerun the same task, and observe whether acceptance changes from subjective judgment to an exit code. Do not change model, prompt, and tool at the same time, or you cannot tell what actually worked.
+
+Completion criteria: all five rows point to a concrete file, path, command, or arbitration rule; save one result for the same acceptance command before and after the addition; the post-edit exit code matches the task card's expectation. If you still need “I think it is better” to decide, this audit is not complete.
+
+## Sources and further reading
+
+- [Claude Code documentation: How Claude remembers your project (CLAUDE.md)](https://code.claude.com/docs/en/memory)
+- [OpenAI Codex documentation: Custom instructions with AGENTS.md](https://developers.openai.com/codex/guides/agents-md)
+- [Official AGENTS.md site](https://agents.md/)
+- [Harness Engineering Orange Book](https://github.com/alchaincyf/harness-engineering-orange-book)
+- [This article's research pack and runnable Showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/instruction-layer)
+
+The first three links are official primary sources supporting all current product behavior in this article, verified on 2026-07-11. The Orange Book is a Chinese topic map (a secondary source) that helped confirm how to organize the layered narrative; its repository is shared for education and requires attribution, so this article retains the link and attribution without copying images or long passages. The five executable dimensions and priority ladder are LearnPrompt's operational synthesis of official advice, not an industry-wide standard; the Showcase has been independently reorganized and checked.
