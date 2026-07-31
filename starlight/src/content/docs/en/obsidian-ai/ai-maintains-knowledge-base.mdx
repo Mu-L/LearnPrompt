@@ -1,0 +1,256 @@
+---
+title: "Let AI Maintain a Knowledge Base Without Editing It Directly: Turn Merges, Staleness, and Orphan Notes into an Approval Queue"
+description: Use Obsidian Search, properties, backlinks, and links to collect signals, let AI generate evidence-backed maintenance proposals only, and move to a separate application workflow after human approval.
+sidebar:
+  order: 4
+difficulty: intermediate
+source_repo: alchaincyf/obsidian-ai-orange-book
+source_url: https://github.com/alchaincyf/obsidian-ai-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-12"
+reading_time: 16 minutes
+research_path: research/articles/ai-maintains-knowledge-base
+showcase_path: research/articles/ai-maintains-knowledge-base/showcase/knowledge-maintenance-proposal
+showcase_status: verified
+quality_score: 97
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last checked | Author |
+| --- | --- | --- | --- |
+| Intermediate | 16 minutes | 2026-07-12 | LearnPrompt Editorial Team |
+
+Once your Obsidian vault starts growing, the most annoying problem is usually not “I cannot find anything,” but “I found three almost identical things and do not know which one to trust.” One note says invoice terms are 30 days, while a newer source says 14 days; two project retrospectives both discuss the same launch plan, yet one preserves the roadmap and the other the accessibility review; one idea has no links at all and looks like an island, but it may simply be a seed worth keeping.
+
+At that point, asking AI to “help me organize my knowledge base” is tempting—and dangerous. The real danger is not that AI makes a bad suggestion; it is that it edits, deletes, or merges source notes before you have reviewed the evidence. Knowledge-base maintenance is neither a search nor an automated batch replacement. A safer approach is to confine AI to an approval queue:
+
+> AI discovers signals, organizes evidence, and writes maintenance proposals; people decide whether to merge, mark stale, add sources, add links, preserve conflicts, or defer action.
+
+## What you will be able to do after reading
+
+After reading, you should be able to design a maintenance workflow that never silently edits your vault:
+
+1. Use Obsidian Search, properties, backlinks, and links to gather observable signals while understanding their blind spots.
+2. Reframe `duplicate`, `stale`, `orphan`, and `conflict` from “model judgments” into evidence-backed editorial questions.
+3. Have AI output maintenance proposals: paths, evidence, observed facts, proposed changes, confidence, human-approval markers, and source-preservation rules.
+4. Use deterministic gates to reject missing evidence, automatic application, unsupported merges, stale flags without sourced contradictions, and orphan claims without zero-degree graph evidence.
+5. Practice on a synthetic fixture before using a real vault, confirming that source notes and the manifest remain byte-identical during the proposal stage.
+
+This article does not repeat inbox placement; that is the topic of the previous `vault-directory-for-ai` article. It also does not expand on Git branches, rollbacks, and conflict recovery; those boundaries belong to the next version-control workflow article.
+
+## Maintenance is not retrieval: retrieval answers questions, maintenance changes structure
+
+The goal of retrieval is to answer “Where is this information?” The goal of maintenance is closer to “Are the relationships among this body of information still healthy?” Both may use Search, links, and metadata, but their risks are entirely different.
+
+If you only ask “What are the accessibility requirements for the Alpha launch?”, AI can read several relevant notes and answer, at most needing to cite sources. If you ask AI to “clean up duplicate notes for the Alpha launch,” it may encounter four weightier decisions:
+
+| Maintenance question | Looks like a fact | Is actually an editorial judgment |
+| --- | --- | --- |
+| duplicate / merge | Two notes are similar or share a key | Whether to merge, preserve two perspectives, or create cross-links only |
+| stale | `last_verified` is old or a newer source conflicts | Whether it is stale, applies only to an old contract, or who is authorized to update it |
+| orphan | The link graph has no inbound or outbound edges | Whether it is isolated junk, an unorganized seed, or an intentionally isolated private record |
+| conflict | Two sources say different things | Which is the authoritative source, and whether to split by audience or time |
+
+So this article is not about making AI better at guessing; it is about **not letting guesses turn directly into changes**. AI may put questions into a queue, but every item in that queue must answer: Why was I proposed, which source files are involved, how should I be changed, and why can this not be applied automatically yet?
+
+## What observable signals Obsidian can provide
+
+What Obsidian’s official materials support are underlying signals, not automatic maintenance conclusions.
+
+Search is a core plugin that can use search terms and operators to query notes and canvases. It supports operators such as `file:`, `path:`, `content:`, `tag:`, and `line:`, as well as property queries including `[aliases]`, `[aliases:Name]`, and `[aliases:null]`. This lets you first narrow maintenance candidates to a set of items that “have a certain property,” “have an empty property,” “are in a certain path,” or “contain a stale-related word in the body.”
+
+Properties are YAML structured data at the top of a file. Official documentation describes them as suitable for small, atomic, human- and machine-readable values such as `status`, `source_path`, `last_verified`, and `canonical_key`. But it also explicitly lists limits: nested properties are not directly supported as a complete interactive experience; properties are not Markdown body text; and deeper bulk property editing requires VS Code, scripts, or community plugins. In other words, properties are suitable as signals, not as containers for whole maintenance rationales.
+
+Backlinks can show links from other notes to the current note and distinguish linked mentions from unlinked mentions. The Internal links documentation explains that Obsidian supports both Wikilinks and Markdown links, and that links can form a knowledge network. For maintenance, these signals can help you ask “Is this note cited by nobody?”, “Do these two sources point to each other?”, and “Does this project index link the relevant material?”
+
+But two constraints must be written into the workflow:
+
+- Search excluded files do not appear in search results; Backlinks unlinked mentions are also affected by excluded files. You cannot treat “not visible in the current UI” as “definitely absent from the entire vault.”
+- Obsidian links and properties tell you “what can be observed,” not “how to edit.” Merges, staleness, orphans, and conflicts remain editorial decisions.
+
+## The minimum schema for a maintenance proposal
+
+I recommend limiting one maintenance output to a proposal rather than a patch. The minimum fields are as follows:
+
+```json
+{
+  "action": "stale-flag",
+  "note_paths": ["notes/payment-policy.md"],
+  "evidence_paths": ["notes/payment-policy.md", "current-sources.json"],
+  "observed_fact": "The note says invoices are due in 30 days while current source says 14 days.",
+  "proposed_change": "Flag the note as stale and ask a human to update the payment term after checking the source.",
+  "confidence": "high",
+  "requires_human_approval": true,
+  "source_preservation_rule": "Do not rewrite the note automatically.",
+  "reason": "Stale status requires a contradiction with a current source."
+}
+```
+
+What matters most here is not the field names, but the boundaries:
+
+- `note_paths` points to the notes under discussion.
+- `evidence_paths` points to verifiable evidence; “I saw the context, so I know” is not acceptable.
+- `observed_fact` contains only observed facts, not inflated conclusions.
+- `proposed_change` is written as a diff-like suggestion, but is not applied.
+- `requires_human_approval` must be `true`.
+- `source_preservation_rule` makes clear that source notes, old sources, and conflicting sources cannot be overwritten before approval.
+
+You can also store proposals as Markdown cards for people to review in Obsidian. But machine-verifiable JSON is better suited to gates: missing fields, missing evidence, out-of-bounds paths, and automatic application can all fail directly.
+
+![Knowledge-base maintenance proposal control loop: signal detection enters evidence cards, then a proposal queue, where a person approves or rejects it; a separately bounded downstream apply stage is shown, along with rejection gates 71 through 75 and the source-unchanged invariant](/images/articles/ai-maintains-knowledge-base/knowledge-maintenance-control-loop.svg)
+*Caption: In this control loop, AI can only turn Search, properties, backlinks, and links into evidence cards and proposals; the apply step that actually changes notes happens after human approval and belongs to a separate workflow.*
+
+## How to determine six kinds of outcomes
+
+The following table separates common maintenance actions into “signals” and “judgments that must not be crossed”:
+
+| Outcome | Acceptable signal | Boundary that must be preserved |
+| --- | --- | --- |
+| `merge-candidate` | Shares a frozen `canonical_key`, and content is complementary | Propose a merge candidate only; do not delete either source note |
+| `stale-flag` | A current source explicitly contradicts the note body | An old date does not equal stale; a current source must be cited |
+| `source-needed` | `source_path` is empty and the body has no verifiable source | Do not fabricate a URL; only ask a person to add a source or downgrade it to unsupported |
+| `orphan-review` | In-degree 0 and out-degree 0 in the frozen link graph | An orphan is not a deletion instruction; it may be a seed, a private note, or material awaiting links |
+| `conflict-review` | Two source paths provide competing claims | Preserve both source paths; do not let AI choose a winner itself |
+| `no-op` | There is no missing-source, contradiction, orphan, or merge evidence | A maintenance system must be restrained and should not manufacture actions to seem useful |
+
+Note that `duplicate` is not “similarity exceeds 0.85.” Similarity can be a ranking clue, but a real merge proposal must at least explain why the two notes belong to the same canonical key, whether their content is redundant or complementary, which source passages must be retained after merging, and which conflicts cannot be resolved automatically.
+
+Likewise, `stale` is not “has not been updated for more than 90 days.” An old note may still be correct. This article’s Showcase requires stale findings to have contradiction evidence from `current-sources.json` precisely to prevent the collateral damage of “cleaning the vault by age.”
+
+## Showcase: synthetic knowledge-base maintenance proposals
+
+The Showcase for this article is located at:
+
+```text
+research/articles/ai-maintains-knowledge-base/showcase/knowledge-maintenance-proposal/
+```
+
+It is a completely synthetic knowledge base and contains no real vaults, accounts, chats, or private links. The key parts of the directory structure are:
+
+```text
+notes/
+maintenance-manifest.json
+link-graph.json
+current-sources.json
+contracts/
+scripts/
+results/
+reports/
+```
+
+Here, `notes/` contains 11 Markdown notes; `maintenance-manifest.json` freezes each note’s canonical key and expected outcome; `link-graph.json` freezes the link graph; and `current-sources.json` freezes current-source facts. The validator does not accept model-reported success. It mechanically checks:
+
+- a valid plan exits `0`;
+- missing provenance/evidence exits `71`;
+- destructive mutation or auto-apply exits `72`;
+- unsupported merge exits `73`;
+- stale flag without current-source contradiction exits `74`;
+- orphan claim without zero-degree graph evidence exits `75`;
+- privacy scan exits `0`.
+
+Reproduction commands:
+
+```bash
+node research/articles/ai-maintains-knowledge-base/showcase/knowledge-maintenance-proposal/scripts/verify-showcase.mjs
+node research/articles/ai-maintains-knowledge-base/showcase/knowledge-maintenance-proposal/scripts/privacy-scan.mjs
+```
+
+Summary of deterministic verifier output from 2026-07-12:
+
+```text
+valid plan: expected 0, actual 0
+missing provenance/evidence: expected 71, actual 71
+destructive mutation or auto-apply: expected 72, actual 72
+unsupported merge: expected 73, actual 73
+stale flag without contradiction: expected 74, actual 74
+orphan without zero-degree graph: expected 75, actual 75
+privacy scan: expected 0, actual 0
+PASS source inventory and hashes unchanged
+```
+
+This gate also checks action counts, exact evidence, source inventory, source hashes, and allowed changed paths. The only paths a live run may write to are:
+
+```text
+reports/maintenance-plan.json
+reports/maintenance-plan.md
+```
+
+The writer stage attempted one fresh `gpt-5.5` nested run:
+
+```bash
+CODEX_NESTED_MODEL=gpt-5.5 node research/articles/ai-maintains-knowledge-base/showcase/knowledge-maintenance-proposal/scripts/run-codex-live.mjs
+```
+
+The host returned a read-only database error while Codex was initializing local state, exited `1`, and generated no reports; that history is retained in `results/live-attempt-summary.txt` and was not presented as a success. The outer controller then performed a substitute run against the same frozen fixture. Although the first substitute run generated six seemingly reasonable proposal types, it omitted the top-level JSON `fixture` contract, and the validator correctly rejected it with `71`; the summary is retained in `results/live-controller-attempt-1-invalid.md`.
+
+The final permitted retry after tightening the prompt passed: fresh `gpt-5.5` wrote only `maintenance-plan.json` and `.md`, one entry for each of the six action types, and the validator exited `0`; protected files, source inventory, and source hashes were all unchanged. Success evidence is located at `results/live-controller-summary.json`, `results/live-maintenance-plan.*`, and `results/live-validation.txt`.
+
+This history matters: **“The model finished and all six proposal types are present” still does not mean it passed; omitting the top-level contract requires rejection.** An independent read-only reviewer then reviewed the body, research package, three layers of live evidence, and final rendering, and upgraded the article to `verified` with 97/100, zero open issues, and a visual PASS.
+
+## What to review during human approval
+
+A maintenance queue is not intended to make people reread the entire vault; it concentrates human judgment on a small number of questions.
+
+When reviewing `merge-candidate`, do not look only at whether the two titles resemble each other. First check whether the canonical key comes from your frozen manifest, then determine whether the content is complementary or overwrites itself. If one note preserves the roadmap and another preserves the accessibility review, the merge suggestion should say “retain both source passages and create a new structure,” not “delete one of them.”
+
+When reviewing `stale-flag`, first ask whether the current source really contradicts the note. If `last_verified` is merely old, it can enter “needs review” at most; it cannot be labeled stale. Old material may still be a historical fact, so adding a time range may be more appropriate than overwriting it.
+
+When reviewing `source-needed`, the key is to reject source hallucinations. AI may say “this claim lacks `source_path`,” but it may not say “I found an official-looking link.” The correct action for missing sources is usually to ask the owner, downgrade the claim, add a real source, or temporarily move it out of the publishable knowledge area.
+
+When reviewing `orphan-review`, zero inbound and zero outbound degrees prove only that “there are no links in this frozen graph.” They do not prove the note has no value. You may add links, retain it as a seed, move it into personal scratch, or archive it, but each should be a human choice.
+
+When reviewing `conflict-review`, preserving both sources is most important. Many knowledge bases are damaged by AI maintenance not because AI cannot find conflicts, but because it resolves them too quickly into a single answer. In real work, conflicts often mean that two sources apply to different times, audiences, contracts, or product tiers.
+
+## Failure modes and debugging order
+
+If your maintenance workflow frequently produces bad proposals, investigate in this order:
+
+1. **Do evidence paths exist?** Reject proposals without `evidence_paths` directly; do not put them into the human queue.
+2. **Are signals complete?** Are Search and unlinked mentions affected by excluded files? Does the link graph come from the same frozen snapshot?
+3. **Are properties overloaded?** Do properties contain only small atomic fields? Have you put whole judgments into YAML, making bulk editing brittle?
+4. **Do actions cross the boundary?** Does the proposal stage write only to reports? If it changed notes, that is a level-`72` failure.
+5. **Are conclusions being substituted?** Old does not equal stale; similar does not equal duplicate; zero-degree does not equal delete; conflict does not equal choose a winner.
+
+The minimum debugging principle is: first make the validator reject bad output, then let people decide whether good output is worth applying. Do not reverse this and make people visually sift through a pile of automatic changes to find incidents.
+
+## When not to use this method
+
+If your vault is mainly private journals, unorganized inspiration fragments, or material you do not intend to let any automation read, you do not need to build a complete maintenance queue. Manually organizing a small number of key notes is more appropriate.
+
+If what you really need is bulk migration, moving files, renaming, rollback, and conflict recovery, first establish a Git workflow and backup strategy. This article handles only the “proposal stage” and does not replace version control.
+
+If your sources are still mixed among chat records, web screenshots, forwarded messages, and personal memory, first do source capture. Without source boundaries, AI maintenance can only package uncertainty to look more like truth.
+
+If you want AI to directly maintain a knowledge base that affects public publishing, contracts, medical, legal, or financial judgments, do not skip human review. AI can draft high-risk knowledge maintenance proposals, but approval responsibility must remain in a human process.
+
+## Hands-on exercise: run one maintenance pass as an approval queue
+
+Find a small vault sample that can be public or synthetic, and prepare at least 10 Markdown notes. Do not use a real private vault for the first exercise.
+
+1. Add small properties to each note: `canonical_key`, `status`, `source_path`, and `last_verified`.
+2. Freeze a `maintenance-manifest.json` that states which notes are expected to enter merge, stale, source-needed, orphan, conflict, and no-op.
+3. Freeze a `link-graph.json`; do not let AI reinterpret the graph while running.
+4. Freeze a `current-sources.json`; write only verifiable current-source contradictions into it.
+5. Let AI write only `reports/maintenance-plan.json` and `reports/maintenance-plan.md`.
+6. Write a minimum validator: missing evidence fails, automatic application fails, unsupported merge fails, stale without a current-source contradiction fails, and orphan without zero-degree graph evidence fails.
+
+Completion criteria:
+
+- You can explain the `note_paths` and `evidence_paths` for every proposal.
+- Source notes and the manifest have unchanged hashes during the proposal stage.
+- There is at least one `no-op`, proving the system is restrained.
+- A note with a missing source has not been given a fabricated URL.
+- Conflict proposals preserve both source paths.
+- Before human approval, no note content has been rewritten.
+
+## Sources and further reading
+
+- Obsidian official documentation: [Search](https://obsidian.md/help/Plugins/Search)
+- Obsidian official documentation: [Properties](https://obsidian.md/help/properties)
+- Obsidian official documentation: [Backlinks](https://obsidian.md/help/Plugins/Backlinks)
+- Obsidian official documentation: [Internal links](https://obsidian.md/help/links)
+- Secondary topic map: [Obsidian AI Orange Book](https://github.com/alchaincyf/obsidian-ai-orange-book)
+- This article’s research package and synthetic Showcase: `research/articles/ai-maintains-knowledge-base`
+
+The first four items are official materials and support the article’s statements about the current behavior and limits of Search, properties, backlinks, and links. `Obsidian AI Orange Book` is used only as a Chinese topic map, especially for the compiler/wiki framing in §06; its author is Huashu / alchaincyf. Its README states that the work may be used free of charge for learning and exchange, and that reprints and citations must credit the source, but this is not a standard CC/OSI license. This article does not reproduce the PDF’s body text, screenshots, charts, or images, and does not treat its claims about scale, RAG, social influence, or autonomous maintenance as current facts.

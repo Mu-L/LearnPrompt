@@ -1,0 +1,133 @@
+---
+title: AI Practice Map
+description: Choose the shortest route among LearnPrompt's eight practice tracks, based on your current task, failure mode, and expected deliverable.
+sidebar:
+  order: 1
+difficulty: beginner
+legacy_status: current
+---
+
+## This isn't a course catalog — it's an entry-point decision tool
+
+Don't start by asking "what order should I read everything in." Ask three more useful questions first:
+
+1. Do I have a real project right now, or a disposable practice repo?
+2. Is the current blocker in describing the task, executing with tools, verifying the result, or persisting across sessions?
+3. What checkable deliverable do I want to have seven days from now?
+
+LearnPrompt currently has eight practice tracks. They're organized by problem layer, not by tool popularity.
+
+## What each of the eight tracks solves
+
+| Track | Problem it solves | Suggested first read | Evidence the track is complete |
+| --- | --- | --- | --- |
+| AI Coding | Turning a vague idea into a small, executable, verifiable slice | [The minimum workflow](../../ai-coding/minimum-agentic-coding-workflow/) | One full plan → patch → verify → learn loop |
+| Claude Code | Managing instructions, sessions, and extensions in a local project | [Install and your first project](../../claude-code/install-and-first-project/) | A revertible small repo change plus real check results |
+| Codex | Choosing among CLI, IDE, App, and Cloud, and managing sandbox and review | [The four execution surfaces](../../codex/codex-form-factors/) | A chosen execution surface and a reviewable task receipt |
+| Agent Engineering | Diagnosing why an agent drifts, overreaches, forgets, or won't stop | [The five components of a harness](../../agent-engineering/what-is-harness/) | A gap table across instructions, capabilities, constraints, state, and orchestration |
+| Agent Skills | Turning a stable, repeated workflow into a triggerable, testable work package | [What is a Skill](../../agent-skills/what-are-agent-skills/) | A `SKILL.md` that passes trigger and structure checks |
+| Loop Engineering | Making one task produce the next round of verifiable action | [The five moves of a loop](../../loop-engineering/five-moves/) | A minimal loop with state, verification, persistence, and a stop condition |
+| Obsidian AI | Making material, project state, and experience placeable, routable, and handoff-ready | [The vault directory contract](../../obsidian-ai/vault-directory-for-ai/) | A placement contract or a handoff packet |
+| Hermes / OpenClaw | Understanding learning writes, message routing, deployment, and budget for long-running agents | [Hermes's learning loop](../../agent-frameworks/hermes-learning-loop/) or [The OpenClaw architecture guide](../../agent-frameworks/openclaw-architecture-guide/) | A write-approval table or an auditable gateway routing diagram |
+
+## Locate yourself by failure mode first
+
+If you already have a project, this table usually gets you there faster than a "beginner/expert" label:
+
+| What you're seeing | Read first | Hold off on |
+| --- | --- | --- |
+| The agent changes the wrong thing right out of the gate | [Task, context, and verification](../context-task-verification/) + [The instruction layer](../../agent-engineering/instruction-layer/) | Don't just write a longer, more general-purpose prompt |
+| Not sure whether to turn on auto-execution | [Plan, auto, and human approval](../../ai-coding/plan-auto-approval-boundary/) | Don't decide permissions by "how much you trust the model" |
+| Stuck going back and forth between Claude Code and Codex | [Choosing a tool](../../ai-coding/choose-claude-code-or-codex/) | Don't just compare model leaderboards |
+| The change looks done, but nobody can prove it's correct | [The feedback layer](../../agent-engineering/feedback-loop/) | Don't treat "done" as evidence of "verified" |
+| A long task drifts partway through | [Claude Code's long-task patterns](../../claude-code/advanced-conversation-patterns/) or [The orchestration layer](../../agent-engineering/orchestration-layer/) | Don't keep stretching the same session indefinitely |
+| Rules keep growing and get loaded in full every time | [A minimal CLAUDE.md](../../claude-code/minimum-claude-md/) + [Skill trigger boundaries](../../agent-skills/trigger-rules-and-structure/) | Don't cram all knowledge into always-on instructions |
+| A new agent has to re-investigate everything after taking over | [Handoff-ready Markdown](../../obsidian-ai/markdown-as-agent-memory/) | Don't just paste the chat log |
+| The knowledge base looks well-organized but the agent keeps misfiling things | [The vault placement contract](../../obsidian-ai/vault-directory-for-ai/) | Don't keep adding folders with overlapping meaning |
+| A long-running agent "learns" but its writes are uncontrolled | [Hermes's learning loop](../../agent-frameworks/hermes-learning-loop/) | Don't conflate memory, Skills, and model training |
+| OpenClaw is set up but messages don't get through, or exposure is too broad | [The architecture guide](../../agent-frameworks/openclaw-architecture-guide/) + [Go-live decisions](../../agent-frameworks/deployment-channels-cost/) | Don't substitute "the process is running" for an end-to-end health check |
+
+## Three complete reader paths
+
+### Path A: First time doing AI coding
+
+1. [Task, context, and verification](../context-task-verification/)
+2. [The AI coding project checklist](../../ai-coding/project-checklist/)
+3. [The minimum agentic coding workflow](../../ai-coding/minimum-agentic-coding-workflow/)
+4. [Choosing between Claude Code and Codex](../../ai-coding/choose-claude-code-or-codex/)
+5. Pick one tool and ship one real small change
+
+The exit criterion isn't "I understand AI coding" — it's a clean diff, one passing verification command, and one lesson written back into the project.
+
+### Path B: Already using Claude Code or Codex
+
+Follow the branch for the tool you're actually using; don't treat the other product line as required reading:
+
+- **Claude Code branch**: [A minimal CLAUDE.md](../../claude-code/minimum-claude-md/) → [Context for long tasks](../../claude-code/advanced-conversation-patterns/) → [Choosing among Skills, Hooks, and MCP](../../claude-code/skills-hooks-mcp-roles/).
+- **Codex branch**: [The Codex CLI workflow](../../codex/codex-cli-workflow/) → [Sandbox and approvals](../../codex/sandbox-and-permissions/) → depending on your task, [fitting tasks to Cloud](../../codex/codex-cloud-task-fit/) or [auto-review boundaries](../../codex/auto-review-boundaries/).
+- **Shared gaps for both branches**: [Plan, auto, and human approval](../../ai-coding/plan-auto-approval-boundary/) → [The feedback layer](../../agent-engineering/feedback-loop/).
+- **Only if you're actually collaborating across tools**, read [Dual-track Git handoff between Codex and Claude Code](../../codex/codex-claude-code-dual-track/) — don't force a handoff just to look "tool-complete."
+
+The exit criterion is a set of rules, diffs, and check results that match your current tool and can be replayed by another agent or reviewer; dual-tool users should additionally keep a handoff contract.
+
+### Path C: Building a long-term agent workflow
+
+1. [The five components of a harness](../../agent-engineering/what-is-harness/)
+2. Audit [instructions](../../agent-engineering/instruction-layer/), [constraints](../../agent-engineering/constraint-layer/), [memory](../../agent-engineering/memory-layer/), [feedback](../../agent-engineering/feedback-loop/), and [orchestration](../../agent-engineering/orchestration-layer/) in turn
+3. [The five moves of a loop](../../loop-engineering/five-moves/)
+4. Decide whether a repeated workflow is worth upgrading to a [Skill](../../agent-skills/what-are-agent-skills/)
+5. Keep observable state using [handoff-ready Markdown](../../obsidian-ai/markdown-as-agent-memory/) or the framework's own approval mechanism
+
+The exit criterion is a minimal loop with an input contract, state, a stop condition, verification, and persistence boundaries — not a slogan about "running fully automatically forever."
+
+## 7-Day Practice Path
+
+| Day | Action | Evidence you must leave behind that day |
+| --- | --- | --- |
+| 1 | Pick a small task you can finish in an hour | Goal, scope, off-limits areas, verification |
+| 2 | Have the agent do read-only exploration and give a 3–6 step plan | File list, risks, and open questions |
+| 3 | Implement only the smallest slice | A readable diff, no opportunistic refactors |
+| 4 | Run the fastest relevant check | Raw command, exit code, manual checkpoint |
+| 5 | Deliberately construct a failure or edge case | The rejected input and why |
+| 6 | Write one reusable lesson back into the project | One short rule, memory entry, or checklist item |
+| 7 | Replay it in a fresh session or with another reviewer | Can it continue without relying on chat memory? |
+
+## Task card template
+
+```md
+# Goal
+What change will the user or system be able to observe once this is done?
+
+# Context
+What's the project, current state, key entry points, and existing evidence?
+
+# Scope and off-limits
+What's allowed to change? What isn't? Which actions require asking first?
+
+# Verification
+What command do you run? What does a human check? What gets reported on failure?
+
+# Delivery
+Do you need a diff, a receipt, a review, a draft PR, or a handoff for the next round?
+```
+
+When the template is hard to fill in, don't reach for a stronger model — go back to [Task, context, and verification](../context-task-verification/).
+
+## How to tell you've actually learned it
+
+After finishing a tutorial, verify with four questions:
+
+1. Can I swap the example for my own small input, instead of copying the final answer?
+2. Can I name at least one edge case outside the happy path that should be rejected?
+3. Did I keep raw evidence — commands, exit codes, diffs, or manual checks?
+4. Could a fresh agent continue from just my output, without this chat?
+
+If you can't answer even one of the four, go back to that tutorial's showcase or exercise — don't expand your tool stack yet.
+
+## Next step
+
+No project yet: create a disposable small repo and start with [the minimum workflow](../../ai-coding/minimum-agentic-coding-workflow/).
+
+Already have a project: write a task card first, then pick 1–3 articles from the failure-mode table above.
+
+About to let an agent write files or reach external systems: go through [the safety basics](../setup-safety-basics/) first.

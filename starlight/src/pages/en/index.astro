@@ -1,0 +1,327 @@
+---
+import "../../styles/home-en.css";
+
+const base = import.meta.env.BASE_URL === "/" ? "" : import.meta.env.BASE_URL.replace(/\/$/, "");
+const withBase = (href: string) => (href.startsWith("/") ? `${base}${href}` : href);
+const chineseHomeUrl = new URL(withBase("/"), Astro.site);
+const englishHomeUrl = new URL(withBase("/en/"), Astro.site);
+const sitemapUrl = new URL(withBase("/sitemap-index.xml"), Astro.site);
+const socialImageUrl = new URL(withBase("/images/wiki-transition-poster-v1.jpg"), Astro.site);
+const organizationUrl = new URL(`${withBase("/")}#organization`, Astro.site);
+const homeSchema = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": organizationUrl.href,
+    name: "LearnPrompt",
+    url: chineseHomeUrl.href,
+    logo: new URL(withBase("/favicon.svg?v=transparent-circle"), Astro.site).href,
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "LearnPrompt",
+    url: englishHomeUrl.href,
+    inLanguage: "en",
+    description: "Learn AI coding, agents, Skills, and knowledge workflows through real projects.",
+    publisher: { "@id": organizationUrl.href },
+  },
+];
+const serializedHomeSchema = JSON.stringify(homeSchema).replaceAll("</", "<\\/");
+
+const paths = [
+  {
+    index: "01",
+    title: "AI Coding",
+    href: "/en/ai-coding/",
+    body: "Turn an idea into a task, inspect the diff, run the checks, and complete one reusable delivery loop.",
+    meta: "5 guides · core workflow",
+  },
+  {
+    index: "02",
+    title: "Claude Code",
+    href: "/en/claude-code/",
+    body: "Work inside a real local project, then grow from project rules into Skills and multi-agent collaboration.",
+    meta: "8 guides · local projects",
+  },
+  {
+    index: "03",
+    title: "Codex",
+    href: "/en/codex/",
+    body: "Choose where the work should run before deciding between CLI, IDE, desktop, and Cloud.",
+    meta: "6 guides · execution & review",
+  },
+  {
+    index: "04",
+    title: "Agent Engineering",
+    href: "/en/agent-engineering/",
+    body: "Debug unreliable agents through instructions, constraints, memory, feedback, and orchestration.",
+    meta: "6 guides · harness",
+  },
+  {
+    index: "05",
+    title: "Agent Skills",
+    href: "/en/agent-skills/",
+    body: "Package a repeated workflow into a Skill with explicit triggers, inputs, steps, and verification.",
+    meta: "7 guides · reusable workflows",
+  },
+  {
+    index: "06",
+    title: "Loop Engineering",
+    href: "/en/loop-engineering/five-moves/",
+    body: "Leave state, evidence, and the next action behind so the following session can continue cleanly.",
+    meta: "1 guide · continuous loop",
+  },
+  {
+    index: "07",
+    title: "Obsidian AI",
+    href: "/en/obsidian-ai/",
+    body: "Use Markdown and Git to build a knowledge workbench an agent can read, maintain, and hand off.",
+    meta: "5 guides · knowledge workbench",
+  },
+  {
+    index: "08",
+    title: "Hermes / OpenClaw",
+    href: "/en/agent-frameworks/hermes-learning-loop/",
+    body: "Understand how persistent agents move messages, write memory, use Skills, and consume a budget.",
+    meta: "3 guides · agent frameworks",
+  },
+];
+
+const featured = [
+  [
+    "LearnPrompt AI Practice Wiki",
+    "/en/start-here/",
+    "Start with a real task and see how the whole practice system fits together.",
+  ],
+  [
+    "AI Practice Map",
+    "/en/start-here/ai-practice-map/",
+    "Choose the shortest route based on your task, failure mode, and desired artifact.",
+  ],
+  [
+    "Task, Context, and Verification",
+    "/en/start-here/context-task-verification/",
+    "Freeze a vague request into context, a goal, boundaries, and a verification contract.",
+  ],
+  [
+    "How to Use This Wiki",
+    "/en/start-here/how-to-use-this-wiki/",
+    "Pick a reading path by task and judge every tutorial by the evidence it leaves behind.",
+  ],
+  [
+    "Safety Basics for AI Tool Setup",
+    "/en/start-here/setup-safety-basics/",
+    "Set boundaries for secrets, permissions, data, cost, and releases before an agent starts work.",
+  ],
+];
+
+const contactEmail = "carl@goodcase.ai";
+const wechatId = "aiwarts101";
+const mailSubject = encodeURIComponent("Let's talk about LearnPrompt");
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LearnPrompt | Put AI to work in real projects</title>
+    <meta
+      name="description"
+      content="LearnPrompt teaches task framing, code delivery, agent workflows, Skills, and durable knowledge through real AI projects."
+    />
+    <link rel="canonical" href={englishHomeUrl} />
+    <link rel="alternate" hreflang="zh-CN" href={chineseHomeUrl} />
+    <link rel="alternate" hreflang="en" href={englishHomeUrl} />
+    <link rel="alternate" hreflang="x-default" href={chineseHomeUrl} />
+    <link rel="sitemap" href={sitemapUrl} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="LearnPrompt" />
+    <meta property="og:title" content="LearnPrompt | Put AI to work in real projects" />
+    <meta property="og:description" content="Learn task framing, code delivery, agent workflows, Skills, and durable knowledge through real AI projects." />
+    <meta property="og:url" content={englishHomeUrl} />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="zh_CN" />
+    <meta property="og:image" content={socialImageUrl} />
+    <meta property="og:image:alt" content="LearnPrompt AI Practice Wiki" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="LearnPrompt | Put AI to work in real projects" />
+    <meta name="twitter:description" content="Learn task framing, code delivery, agent workflows, Skills, and durable knowledge through real AI projects." />
+    <meta name="twitter:image" content={socialImageUrl} />
+    <script type="application/ld+json" set:html={serializedHomeSchema} />
+  </head>
+  <body>
+    <main class="lp-en-site">
+      <nav class="lp-en-nav" aria-label="Main navigation">
+        <a class="lp-en-brand" href={withBase("/en/")} aria-label="LearnPrompt English home">
+          <span>LearnPrompt</span>
+          <small>AI Practice Wiki</small>
+        </a>
+        <div class="lp-en-links">
+          <a href={withBase("/")} lang="zh-CN">中文</a>
+          <a href={withBase("/en/start-here/")}>Start</a>
+          <a href="#paths">Paths</a>
+          <a href="#guides">Guides</a>
+          <a href={withBase("/skills/")}>Workshop</a>
+          <a href="#contact">Contact</a>
+        </div>
+      </nav>
+
+      <section class="lp-en-hero" aria-labelledby="hero-title">
+        <div class="lp-en-copy">
+          <p class="lp-en-kicker">REEL 01 · LEARNPROMPT / 2026</p>
+          <h1 id="hero-title"><span>Put AI</span><span>to work.</span></h1>
+          <p class="lp-en-meta">AI Coding · Claude Code · Codex · Agent · Skills · Loop · Knowledge Workflow</p>
+          <p class="lp-en-lede">
+            Start with one real task. Give the agent a contract, inspect the diff, run the checks,
+            and keep the lesson in your project rules or a reusable Skill. LearnPrompt teaches that loop.
+          </p>
+          <div class="lp-en-actions">
+            <a class="lp-en-button lp-en-button-primary" href={withBase("/en/start-here/ai-practice-map/")}>
+              Start learning
+            </a>
+            <a class="lp-en-button" href="#paths">Explore the paths</a>
+          </div>
+        </div>
+
+        <div class="lp-en-frame" aria-label="LearnPrompt visual reel">
+          <video
+            src={withBase("/videos/wiki-transition-v1.mp4")}
+            autoplay
+            loop
+            muted
+            playsinline
+            preload="metadata"
+            poster={withBase("/images/wiki-transition-poster-v1.jpg")}
+          ></video>
+          <div class="lp-en-frame-overlay">
+            <span>Scene 001</span>
+            <strong>Idea → Task → Delivery → Memory</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="lp-en-metrics" aria-label="Tutorial quality evidence">
+        <div>
+          <span>01</span>
+          <strong>47 English guides</strong>
+          <p>The complete LearnPrompt tutorial set is available in English.</p>
+        </div>
+        <div>
+          <span>02</span>
+          <strong>8 practice tracks</strong>
+          <p>Choose an entry point by the work in front of you instead of reading the whole site in order.</p>
+        </div>
+        <div>
+          <span>03</span>
+          <strong>Replayable showcases</strong>
+          <p>Working paths, failure cases, and boundary violations all need evidence you can inspect.</p>
+        </div>
+        <div>
+          <span>04</span>
+          <strong>Primary sources</strong>
+          <p>Commands, permissions, and version claims return to official sources with a verification date.</p>
+        </div>
+      </section>
+
+      <section id="paths" class="lp-en-section lp-en-paths">
+        <div class="lp-en-section-head">
+          <p>8 Tracks · 47 Tutorials</p>
+          <h2 class="lp-en-heading-lines">
+            <span>Start where</span>
+            <span>your work is stuck.</span>
+          </h2>
+        </div>
+        <div class="lp-en-path-list">
+          {paths.map((path) => (
+            <a class="lp-en-path-card" href={withBase(path.href)}>
+              <span>{path.index}</span>
+              <div>
+                <h3>{path.title}</h3>
+                <p>{path.body}</p>
+              </div>
+              <em>{path.meta}</em>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <section id="guides" class="lp-en-section lp-en-guides">
+        <div class="lp-en-section-head">
+          <p>English starting set</p>
+          <h2>Begin with these 5 guides.</h2>
+        </div>
+        <div class="lp-en-guide-grid">
+          {featured.map(([title, href, note], index) => (
+            <a class="lp-en-guide-card" href={withBase(href)}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <h3>{title}</h3>
+              <p>{note}</p>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <section class="lp-en-section lp-en-legacy">
+        <div>
+          <p class="lp-en-kicker">Archive · Legacy Site</p>
+          <h2 class="lp-en-heading-lines">
+            <span>The original</span>
+            <span>LearnPrompt remains.</span>
+          </h2>
+          <p>
+            Visit the legacy site if you want the original course homepage, navigation, and historical material.
+          </p>
+          <a class="lp-en-button lp-en-button-primary" href="https://v1.learnprompt.pro/" target="_blank" rel="noreferrer">
+            Visit the legacy site
+          </a>
+        </div>
+        <a
+          class="lp-en-legacy-shot"
+          href="https://v1.learnprompt.pro/"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Visit the legacy LearnPrompt site"
+        >
+          <img
+            src={withBase("/images/legacy-learnprompt-home.jpg")}
+            alt="Screenshot of the legacy LearnPrompt homepage"
+            loading="lazy"
+          />
+        </a>
+      </section>
+
+      <section id="contact" class="lp-en-section lp-en-contact">
+        <div>
+          <p class="lp-en-kicker">Get in touch</p>
+          <h2>Have an idea? Let’s talk.</h2>
+          <p>
+            Reach out about AI tutorials, agent workflows, Skill packaging, or feedback on the new LearnPrompt.
+          </p>
+        </div>
+        <div class="lp-en-contact-panel">
+          <a href={`mailto:${contactEmail}?subject=${mailSubject}`}>{contactEmail}</a>
+          <span>WeChat · {wechatId}</span>
+          <div class="lp-en-contact-wechat">
+            <span>WeChat Official Account · 卡尔的AI沃茨</span>
+            <img
+              src={withBase("/images/wechat-qrcode.jpg")}
+              alt="QR code for the LearnPrompt WeChat account"
+              width="180"
+              loading="lazy"
+            />
+          </div>
+          <a class="lp-en-button lp-en-button-primary" href={`mailto:${contactEmail}?subject=${mailSubject}`}>
+            Send email
+          </a>
+        </div>
+      </section>
+
+      <footer class="lp-en-footer">
+        <span>© 2026 LearnPrompt</span>
+        <a href="https://github.com/LearnPrompt/LearnPrompt" target="_blank" rel="noreferrer">GitHub</a>
+      </footer>
+    </main>
+  </body>
+</html>

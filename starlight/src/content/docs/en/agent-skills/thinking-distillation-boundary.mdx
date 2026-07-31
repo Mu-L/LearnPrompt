@@ -1,0 +1,330 @@
+---
+title: "The Boundary of Observable Thinking Distillation: Turning Repeated Judgments into Skills Without Seeking Hidden Chain-of-Thought"
+description: "Use receipts, accepted diffs, corrections, and validators to distill observable expert repair methods into candidate Skills, then use holdouts to prove they do not cross into secrets, private transcripts, or raw chain-of-thought."
+sidebar:
+  order: 7
+difficulty: advanced
+source_repo: alchaincyf/agent-skills-orange-book
+source_url: https://github.com/alchaincyf/agent-skills-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-12"
+reading_time: 17 minutes
+research_path: research/articles/thinking-distillation-boundary
+showcase_path: research/articles/thinking-distillation-boundary/showcase/observable-receipt-distiller
+showcase_status: verified
+quality_score: 99
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Advanced | 17 minutes | 2026-07-12 | LearnPrompt Editorial Team |
+
+You have seen this impulse before.
+
+Someone on the team fixes the same kind of problem well three times in a row, and you immediately want to turn “their way of thinking” into a Skill. Then comes the most dangerous step: people start asking, “Can we retain the complete chain of thought?”, “Can we feed the raw chat transcript directly to the next agent?”, or “Can we extract the model’s real decision process from its brain?”
+
+Once this goes off course, a Skill stops being a reusable workflow encapsulation and drifts toward three risks:
+
+1. **Treating non-public content as training material.**
+2. **Writing a one-off successful path as a general rule.**
+3. **Mistaking a reasoning summary that the product permits users to see for raw chain-of-thought that can be collected.**
+
+This article answers one central question only: **when you want to turn repeatedly occurring expert judgment methods into a Skill, which inputs are observable, publishable, and verifiable, and which must be rejected outside the boundary?**
+
+:::caution[Clarifying the terminology first]
+“Thinking distillation” in this article is a Chinese teaching term that LearnPrompt has organized by borrowing the Orange Book’s topic map. It is not an official Agent Skills term, nor is it knowledge distillation in model training.
+:::
+
+## What you will be able to do after reading
+
+You will leave with a stricter distillation card, rather than a vague “turn experience into a Skill”:
+
+```yaml
+allowed_inputs:
+  - input snapshot
+  - accepted patch
+  - user correction
+  - validator command/result
+  - known limitation
+rejected_inputs:
+  - secret-bearing material
+  - raw private transcript
+  - hidden chain-of-thought request
+output:
+  - candidate skill
+  - holdout evaluation
+  - human approval gate
+```
+
+You will also see a real, replayable synthetic Showcase: [`observable-receipt-distiller`](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/thinking-distillation-boundary/showcase/observable-receipt-distiller). It uses only three fully synthetic frontmatter-repair receipts, generates a `.agents/skills/frontmatter-repair/` candidate, and then mechanically validates it with four held-out tasks.
+
+![Observable receipts, accepted diffs, corrections, and validators first pass through a boundary filter, then generate a candidate Skill and run holdouts; secret markers, raw private transcripts, and hidden-CoT requests are rejected outside the boundary](/images/articles/thinking-distillation-boundary/observable-distillation-boundary.svg)
+*Caption: What can truly enter distillation is not “the process inside the model’s mind,” but observable artifacts; after a candidate is generated, it must still pass a holdout, while secret markers and private transcript / hidden-CoT requests are rejected directly outside the boundary.*
+
+## The answer first: “distillation” here is neither training distillation nor mining hidden chain-of-thought
+
+Unless you nail down this boundary first, the entire article quickly slides into mysticism.
+
+OpenAI’s current reasoning documentation states the product boundary clearly: the API **does not directly expose raw reasoning tokens**; what you can get is an explicitly opt-in **reasoning summary**. The engineering implication is straightforward:
+
+- You cannot treat “I want to know what the model was really thinking” as an ordinary Skill input requirement.
+- You also cannot interpret a reasoning summary in reverse as “this is the complete chain-of-thought.”
+- Still less can you assume that because a chat once contained a compelling analysis process, it is suitable material for a team-publishable Skill.
+
+Therefore, distillation in this article is not about recovering a model’s internal reasoning. It is about **extracting stable rules from externalized results**. If the only artifact you have left is “it thought well this time,” that is not distillation; it is merely a subjective impression.
+
+## What counts as publishable distillation input
+
+A sufficiently strong distillation input is not “rich in content”; it is “complete in its evidence layers.” This article fixes the minimum usable set as five types of observable receipts:
+
+| Evidence layer | What it answers | Why it is reusable |
+| --- | --- | --- |
+| `input snapshot` | What input did it actually face at the time? | Later readers can return to the same starting point |
+| `accepted patch` | What change was actually accepted? | The rule does not stop at verbal praise |
+| `user correction` | What was wrong last time, and why was it changed this time? | The boundary of misjudgment can be written down |
+| `validator command/result` | How can the result be proven valid mechanically? | It makes the rule capable of passing holdouts |
+| `known limitation` | What does this rule not cover yet? | It prevents overgeneralization |
+
+This is a completely different design philosophy from “keep the complete chat.”
+
+A complete chat may indeed contain more context, but it also more easily mixes in:
+
+- privacy such as identities, paths, sessions, accounts, and temporary directories;
+- on-the-spot exploration, off-topic branches, and emotional expression;
+- prompt injection, overreaching demands, and unconfirmed assumptions.
+
+In other words, **a transcript being more raw does not mean it is more suitable for public distillation.** It is often simply noisier and higher risk.
+
+:::note[Why the accepted patch matters]
+Without an accepted patch, you cannot know whether the “rule adopted by the team” actually lands in the body, frontmatter, validator, or output format. Looking only at the conclusion makes it easy to elevate an accidental path into a universal rule.
+:::
+
+## The boundary filter: why secrets, private transcripts, and hidden-CoT requests must be rejected first
+
+Real distillation does not start by generating a candidate. It starts by passing through a boundary filter.
+
+That filter must make at least three kinds of rejection:
+
+| Rejection type | LearnPrompt exit code | Why it must be rejected first |
+| --- | ---: | --- |
+| evidence-poor: conclusion only, with no input / patch / validator | `51` | There is simply not enough evidence to distill a rule |
+| sensitive marker: the material contains sensitive content | `52` | You must stop at the privacy boundary before discussing reuse |
+| raw private transcript / hidden-CoT request marker | `53` | The input itself crosses the boundary and cannot be Skill material |
+
+These three rejection codes are deliberately not “the model answered incorrectly.” They describe **invalid input**, not insufficient capability.
+
+This is why reasoning summaries, rationales, decision records, and raw chain-of-thought must be written about separately:
+
+- **reasoning summary**: a high-level summary the product allows exposure to the caller;
+- **rationale / decision record**: an externalized decision record written by the team itself;
+- **raw chain-of-thought**: the model’s internal reasoning tokens, which are not directly exposed.
+
+The first two may enter a research pack as long as you do not pass them off as “the model’s complete internal thoughts.” The third should not be requested by default, much less enter a public Showcase.
+
+## Showcase: how `observable-receipt-distiller` generates a candidate from three receipts and validates `4/4` with four holdouts
+
+To make the boundary clear, this article deliberately avoids real user material and instead freezes a fully synthetic frontmatter-repair experiment.
+
+The Skill directory is located in the fixture repo at:
+
+```text
+.agents/skills/observable-receipt-distiller/
+├── SKILL.md
+├── references/distillation-contract.md
+├── scripts/distill-candidate.mjs
+├── scripts/evaluate-candidate.mjs
+└── assets/
+```
+
+There are only three training receipts, and each preserves observable fields only:
+
+1. `missing-title-from-first-h1`
+2. `missing-description-from-opening-paragraph`
+3. `invalid-sidebar-order-fallback`
+
+The candidate distilled from these receipts is not an “all-purpose frontmatter repairer.” It is a deliberately narrow `.agents/skills/frontmatter-repair/`:
+
+- When `title` is missing, use the first H1 in the body;
+- When `description` is missing, use the first sentence of the opening paragraph;
+- When `sidebar.order` is not a positive integer, fall back to `999`;
+- Leave already-valid files as no-ops.
+
+These four rules can be written into the candidate not because they “seem reasonable,” but because each has a complete **input -> patch -> correction -> validator** evidence chain in the receipts.
+
+### Frozen results of the offline replay
+
+Run from the repository root:
+
+```bash
+node research/articles/thinking-distillation-boundary/showcase/observable-receipt-distiller/scripts/verify-showcase.mjs
+```
+
+The actual replay results on 2026-07-12 were:
+
+```text
+normal: 0
+evidence-poor: 51
+sensitive-marker: 52
+transcript-marker: 53
+holdout-fail: 54
+privacy: 0
+```
+
+There are two most important positive proofs:
+
+1. The `normal` scenario consistently generates the `frontmatter-repair` candidate.
+2. The holdout set passes `4/4`, and the source receipts remain unchanged.
+
+Negative proof matters just as much: in the `holdout-fail` scenario, after a broken helper is deliberately injected, the result degrades to `1/4` and consistently returns `54`. This shows that the evaluator is not decorative: it can genuinely block a candidate that “looks like a Skill but does not actually generalize.”
+
+### Why a holdout is mandatory here
+
+The biggest mistake in many so-called distillation articles is elevating “one accepted patch” directly into “always fix it this way in the future.”
+
+But whether a candidate holds must answer at least two questions:
+
+1. Can it replay on examples it has **not seen**?
+2. Can it leave files that **should not be changed** as no-ops?
+
+The fourth holdout case in this article exists specifically to test the latter. A Skill that rewrites healthy metadata indiscriminately should not be accepted by the team, even if it can repair the first three counterexamples.
+
+## Two layers of live runs: why both blocked and success must be retained
+
+The user additionally requested one real `gpt-5.5` explicit `$observable-receipt-distiller` invocation. This differs from the offline replay because it must pass through a real nested Codex execution surface.
+
+The fixed command is:
+
+```bash
+CODEX_NESTED_MODEL=gpt-5.5 \
+node research/articles/thinking-distillation-boundary/showcase/observable-receipt-distiller/scripts/run-codex-live.mjs
+```
+
+The real writer-stage result on 2026-07-12 was not success, but **blocked**:
+
+```json
+{
+  "status": "blocked",
+  "exec_exit_code": 1,
+  "source_receipts_unchanged": true,
+  "candidate_written": false,
+  "tests_exit_code": 1
+}
+```
+
+The tail of the frozen stderr showed repeated `stream disconnected` retries. Because the candidate was not written, the subsequent `npm test` also failed as reported.
+
+This is not bad news. On the contrary, it is one of the most important pieces of evidence this tutorial should preserve: **live blocked must not be rewritten as “roughly successful.”** If you silently erase blocked evidence, readers will form the wrong mental model, believing that “passing the offline runner means the whole distillation workflow is production-ready.”
+
+Later, the outer orchestrator reran the same frozen fixture, prompt, and schema. It did not overwrite the writer’s blocked record; it added a second layer of evidence:
+
+```json
+{
+  "status": "completed",
+  "source_receipts_unchanged": true,
+  "candidate_written": true,
+  "distill_exit_code": 0,
+  "evaluation_exit_code": 0,
+  "holdout_result": "4/4",
+  "tests_exit_code": 0
+}
+```
+
+The real `gpt-5.5` explicit `$observable-receipt-distiller` invocation generated `.agents/skills/frontmatter-repair/`, adding only the candidate and `reports/`; all four holdouts passed, `npm test` passed, and the training-receipt checksums were unchanged before and after. The first attempt to write `.agents/skills/frontmatter-repair/` under `workspace-write` was rejected by the host, so the outer layer used a full-access sandbox only for this isolated temporary repo; it received no permission to write outside the project and never touched real transcripts or secrets.
+
+Only the two layers together tell the complete story: writer blocked proves that host restrictions must be layered explicitly; outer-layer success proves that the frozen contract holds in a real nested invocation. Even so, the candidate remains only a candidate; whether it becomes the team’s default Skill still requires human approval.
+
+## A candidate is not a team Skill: when not to elevate a one-off experience into a rule
+
+Even after you obtain a strong set of receipts, there are at least four situations where you should not upgrade it directly:
+
+### Situation one: the rule explains only one accidental path
+
+If there is only one accepted patch and no holdout set, what you have is more like a “case summary,” not a Skill contract.
+
+### Situation two: the material mixes in a private incident
+
+As long as a transcript contains identities, secrets, unredacted paths, session IDs, or a hidden-CoT request, stop outside the boundary first. Remove sensitive material first, then decide whether observable receipts can still remain.
+
+### Situation three: the validator still depends on “looks good”
+
+If whether a holdout passes still ultimately depends on the author’s intuition, the candidate is only a prompt with a different directory name.
+
+### Situation four: the team has not decided whether to adopt it
+
+Once a Skill enters the team’s default directory, it is no longer “the author’s own understanding.” It affects other people’s execution paths, trigger behavior, and reviewer expectations. Candidate and adopted Skill must therefore be separate layers.
+
+:::caution[The easiest sentence to write incorrectly]
+“I distilled an expert’s thinking into a Skill.”
+
+The more accurate wording is: **“I distilled repeated rules from a set of observable receipts into a candidate Skill, and used a holdout and a real live run to prove that it holds under the current synthetic contract; whether to upgrade it into a team Skill still requires human approval.”**
+:::
+
+## A reproducible distillation card
+
+If you also want to create your own “method crystallization,” do not rush to write `SKILL.md`. First fill out this card completely:
+
+```yaml
+topic:
+observable_inputs:
+  - input snapshot
+  - accepted diff
+  - user correction
+  - validator command/result
+  - known limitation
+rejected_inputs:
+  - secret markers
+  - private transcript
+  - hidden cot request
+candidate_output:
+holdout_tasks:
+mechanical_checks:
+human_approval_boundary:
+```
+
+Only when you can answer all four questions below is this card worth turning into a candidate:
+
+1. Which fields are **observable**, rather than imagined by you?
+2. Which repairs were accepted, rather than “how the author originally wanted to fix them”?
+3. Which boundaries can be rejected mechanically with exit codes?
+4. Which rules require a holdout before you dare move forward?
+
+## Exercise: compress your most recent “good judgment” into a receipt, not a transcript
+
+Find a problem you have repaired repeatedly at least twice recently. Whether it is a release checklist, frontmatter, code review, or knowledge-base maintenance, do not save the complete chat yet.
+
+Keep only:
+
+```yaml
+input_snapshot:
+accepted_patch:
+user_correction:
+validator_command:
+validator_result:
+known_limitation:
+```
+
+Then ask yourself:
+
+1. If the raw transcript is deleted entirely, is this receipt still enough to explain “why the rule holds”?
+2. If you test the rule with another unseen holdout, where is it most likely to fail?
+3. If the material contains `contains_sensitive_material: true` or “please reconstruct the hidden reasoning process,” will your system reject it before candidate generation?
+
+If you still cannot answer the third question, do not write distillation yet. It means your boundary has not formed.
+
+## Sources and further reading
+
+- [OpenAI Learn: Build skills](https://learn.chatgpt.com/docs/build-skills) (official product documentation; supports the Skill directory, explicit/implicit invocation, Record & Replay, scope/boundary, inputs/outputs, and script boundaries)
+- [OpenAI Learn: Customization overview](https://learn.chatgpt.com/docs/customization/overview) (official product documentation; supports the layering of `AGENTS.md`, Skills, MCP, and Subagents, as well as the feedback loop for writing corrections back)
+- [OpenAI API: Reasoning models](https://developers.openai.com/api/docs/guides/reasoning) (official API documentation; supports the boundary that raw reasoning tokens are not directly exposed and reasoning summaries require explicit opt-in)
+- [Claude Code Docs: Skills](https://code.claude.com/docs/en/skills) (official product documentation; supports the current approach to Skill directories, progressive disclosure, repeatable workflows, and references/scripts/helpers)
+- [Claude: Improving skill-creator: Test, measure, and refine Agent Skills](https://claude.com/blog/improving-skill-creator-test-measure-and-refine-agent-skills) (official product update; supports capability uplift vs. encoded preference, evals, benchmarks, clean context, and A/B comparators)
+- [Agent Skills Specification](https://agentskills.io/specification) (open specification / primary source; supports `SKILL.md`, `scripts/`, `references/`, `assets/`, and progressive disclosure)
+- [Agent Skills: Evaluating skill output quality](https://agentskills.io/skill-creation/evaluating-skills) (open specification / primary tutorial; supports realistic prompts, holdouts / baselines, assertions, grading evidence, and script-first mechanical checks)
+- [This article’s research pack and Showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/thinking-distillation-boundary) (archive entry for the offline replay, writer-side blocked state, and outer-layer live success)
+- [Agent Skills Orange Book repository](https://github.com/alchaincyf/agent-skills-orange-book) (Chinese topic map / secondary topic map)
+
+Official materials support the current facts in this article about Skill authoring, evaluation, reasoning summaries, and the boundary around hidden reasoning; all were rechecked on 2026-07-12. The `0 / 51 / 52 / 53 / 54` exit codes, candidate-only release boundary, and the workflow of “create a candidate first, then pass a holdout, then obtain human approval” are LearnPrompt’s operational contract and are not presented as official standards.
+
+The Orange Book is used only as a Chinese topic map for the Distillation pattern. This article verifies only statements in its README / README_zh about its author, directory, topic names, and license restrictions; the author is Huashu. Its current README states that it is for personal/educational use only and must not be used for commercial dissemination without authorization. This article does not reproduce its PDF text, screenshots, images, or long passages; it retains only the link, attribution, purpose, and restriction statement.

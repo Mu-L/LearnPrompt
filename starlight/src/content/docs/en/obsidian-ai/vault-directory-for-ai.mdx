@@ -1,0 +1,267 @@
+---
+title: "How an Obsidian Vault Directory Becomes Useful to Agents: Turn a Classification Tree into a Placement Contract"
+description: "Use a frozen synthetic vault to define folder roles, canonical paths, rejection boundaries, and auditing so Claude Code or Codex no longer guesses where files belong across a personal vault."
+sidebar:
+  order: 2
+difficulty: intermediate
+source_repo: alchaincyf/obsidian-ai-orange-book
+source_url: https://github.com/alchaincyf/obsidian-ai-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-12"
+reading_time: 15 minutes
+research_path: research/articles/vault-directory-for-ai
+showcase_path: research/articles/vault-directory-for-ai/showcase/vault-placement-contract
+showcase_status: verified
+quality_score: 96
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Intermediate | 15 minutes | 2026-07-12 | LearnPrompt Editorial Team |
+
+Your vault may already “look neat”: `00_Inbox`, `10_Projects`, `20_Knowledge`, `30_Output`, `50_Resources`, and `99_System` line up in order and are convenient enough for human browsing. But once you ask Claude Code, Codex, or another agent to organize shared material, the real problem appears.
+
+An Agent does not face “is this tree pretty?” but more specific judgment questions:
+
+- Is this new material current project context or reusable knowledge?
+- Is this an output awaiting publication or an external-resource snapshot?
+- Should this template enter the system layer or remain in the inbox until a human confirms it?
+- If a file carries a sensitive marker, should it be rejected first rather than “put somewhere now and sort it later”?
+
+If these questions are not written as explicit rules, a beautiful directory tree is only a taxonomy in human minds. The Agent must still guess across the whole vault. Worse, Obsidian refreshes external file changes automatically, so one mistaken move is not a “draft idea” but an immediately effective file-system operation.
+
+This article answers one central question: **how do you write a vault directory tree as a stable placement contract so people and Agents share one explanation of where something belongs, where it cannot belong, and how to audit it?**
+
+## What you will be able to do after reading
+
+1. Distinguish what Obsidian officially guarantees from what is only LearnPrompt editorial synthesis.
+2. Give your vault explicit folder roles, canonical-path templates, and rejection boundaries.
+3. Use a decision table so an Agent judges “role” first and then “path,” rather than recursively searching your personal vault.
+4. Add a minimal audit plan that checks orphan, role mismatch, unknown root, sensitive placement, and duplicate canonical destination.
+
+## Separate official guarantees from the editorial contract first
+
+First pin this boundary: **Obsidian does not officially define the `00/10/20/30/50/99` directory semantics in this article.**
+
+Official documentation can establish these underlying facts:
+
+| Obsidian official guarantee | This does not mean |
+| --- | --- |
+| A vault is a folder on the local file system containing subfolders | It does not mean Obsidian defines “projects / knowledge / output / resources / system” for you |
+| Notes are Markdown-formatted plain-text files | It does not mean Markdown has a built-in placement contract |
+| You can change files with an external editor or file manager, and Obsidian refreshes | It does not mean an Agent can safely move files freely |
+| `.obsidian` is in the vault root and stores vault-specific settings | It does not mean your `99_System` equals `.obsidian` |
+| Obsidian does not recommend nested vaults | It does not mean the directory automatically becomes stable merely by avoiding nesting |
+| Properties exist as YAML at the top of a file and suit small atomic values | It does not mean a folder tree need not define roles |
+
+:::caution[Distinguish “official guarantees” from “this article's contract”]
+The role division, canonical paths, rejection gate, and audit steps for `00_Inbox / 10_Projects / 20_Knowledge / 30_Output / 50_Resources / 99_System` are LearnPrompt's editorial synthesis. They are **not Obsidian official standards** and not the only viable structure.
+:::
+
+This distinction matters. Once you misrepresent “our team's agreed folder roles” as “Obsidian's official recommendation,” all later automation rests on a false premise. Readers also cannot tell which pieces are replaceable and which are not.
+
+## Why decorative taxonomy makes Agents guess wrongly
+
+For humans, a directory tree often carries much unwritten background knowledge. You see `20_Knowledge` and assume it holds material already organized and reusable later; you see `50_Resources` and assume it holds raw snapshots and links; you know `00_Inbox` is only a temporary entry point and should not accumulate forever.
+
+An Agent has none of these defaults. It sees only:
+
+- File names and paths.
+- Whether you wrote textual guidance such as `AGENTS.md`, `CLAUDE.md`, or `index.md`.
+- Whether relationships between directories are stable and unambiguous.
+- Whether it is allowed to read the whole vault.
+
+If folder names merely “help humans remember” without placement rules, an Agent most easily makes three errors:
+
+1. Put an external snapshot directly into knowledge because it “also looks like knowledge.”
+2. Put a project decision into long-term knowledge, losing it when later searching active tasks.
+3. When material is sensitive or unsuitable for sharing, choose a “more hidden” folder rather than explicitly reject it.
+
+Since Obsidian refreshes external changes, these errors become live file-system state rather than hypotheses in a chat.
+
+The teaching value of numbered systems such as Johnny.Decimal explains only half the problem: **shallow, predictable structure reduces hesitation about where to place something.** It does not answer the other half: what to reject, what should be canonical, what is only an external snapshot, and what is internal knowledge. Numbering reduces ambiguity, but **numbering itself is not a contract**.
+
+## Write the directory tree as a placement contract
+
+A practical directory contract must specify at least five things:
+
+1. **Role roots**: every root directory has one stable role.
+2. **Placement decision**: judge a new item’s role before deciding its path.
+3. **Canonical path**: every material type has one template, not “put it somewhere roughly here.”
+4. **Reject / quarantine boundary**: material unsuitable for the shared vault is explicitly refused.
+5. **Audit plan**: regularly check orphan, role mismatch, unknown root, sensitive placement, and duplicate canonical destination.
+
+The LearnPrompt example contract used here is:
+
+```text
+00_Inbox      transient intake only
+10_Projects   active project decisions and tasks
+20_Knowledge  reusable synthesized knowledge
+30_Output     publishable deliverables
+50_Resources  external source snapshots and links
+99_System     scripts, config templates, and runbooks
+```
+
+What decides automation stability among these six roots is not the numbers, but their **single responsibility**. For example:
+
+- `10_Projects` accepts only decisions and tasks still driving execution.
+- `20_Knowledge` accepts only reusable conclusions already abstracted from a specific project.
+- `50_Resources` preserves the boundary of an external source, preventing snapshots from masquerading as internal knowledge.
+- `99_System` holds runbooks, script guidance, and templates, but is not `.obsidian`.
+
+![A vault placement-contract mechanism diagram from an inbox item through role decision to canonical path or reject rail; it also labels the five audit gates: 51 orphan, 52 role mismatch, 53 unknown root, 54 sensitive placed, and 55 duplicate canonical destination.](/images/articles/vault-directory-for-ai/vault-placement-contract.svg)
+*Caption: What a directory tree provides an Agent is not “beautiful classification,” but a finite question: determine role first, then land on a canonical path. Material that cannot land in the contract is not randomly placed; it is rejected. The five gates on the right show how the contract is mechanically audited.*
+
+There is another often-missed boundary: **folders answer “which stable area does it belong to,” while properties answer “what is this file's state inside that area.”**
+
+Official properties documentation says properties suit small, atomic human- and machine-readable values. A stable practice is therefore:
+
+- Use folder role to decide which category area receives a file.
+- Use note properties for in-file state such as `status`, `owner`, `source_url`, and `reviewed_at`.
+
+If you encode state in directory depth too, paths grow deeper and deeper. If you use only properties without role roots, Agents search the wrong area first. Both are needed, but they are not the same thing.
+
+## An executable decision table: role first, then template
+
+This table is the core of the contract. It is not a “recommended directory tree,” but a **placement decision table**:
+
+| New-material signal | Role to enter | Canonical-path template | Why not another role |
+| --- | --- | --- | --- |
+| A decision still being executed in a current project | `project` | `10_Projects/<scope>/Decisions/<slug>.md` | It directly drives work and is not long-term knowledge |
+| A current project's task list | `project` | `10_Projects/<scope>/Tasks/<slug>.md` | Tasks are live context and should not first be abstracted into knowledge |
+| A reusable conclusion synthesized from multiple sources | `knowledge` | `20_Knowledge/<scope>/<slug>.md` | It has left one project and can be reused across tasks |
+| A draft or outline prepared for external publication | `output` | `30_Output/<channel>/<slug>.md(x)` | It is for publication or sharing, not a raw resource |
+| Official-page excerpt, web snapshot, or original link | `resource` | `50_Resources/<source>/<slug>.md` | It remains an external source and must preserve provenance boundary |
+| Runbook, template, or script documentation | `system` | `99_System/<bucket>/<slug>.md` | This is process asset, not content asset |
+| Sensitive-marked or material unsuitable for sharing | `reject` | `null` | The contract requires rejection, not “choose a hidden directory” |
+
+Once the decision table is explicit, the Agent's work shrinks from “understand your second-brain philosophy” to a finite set of questions:
+
+1. Which signal does this item belong to?
+2. Which role corresponds to that signal?
+3. What is that role's canonical-path template?
+4. Does any reject condition take priority over placement?
+
+This is why a placement contract is more useful than decorative taxonomy. It does not make an Agent “smarter”; it makes the Agent perform less open-ended guessing.
+
+## Frozen Showcase: 12 synthetic inbox items, 6 exits, and 1 real live plan
+
+To make this clear, I did not inspect a real vault. Instead, I froze a completely synthetic showcase:
+
+- 12 inbox items, all in `00_Inbox`.
+- A frozen `inbox-manifest.json`.
+- A frozen `vault-policy.json`.
+- One deterministic validator specifically checking `0/51/52/53/54/55`.
+- One fresh `gpt-5.5` Codex live attempt allowed to write only a placement-plan report.
+
+Run these two commands directly:
+
+```bash
+node research/articles/vault-directory-for-ai/showcase/vault-placement-contract/scripts/verify-showcase.mjs
+CODEX_NESTED_MODEL=gpt-5.5 node research/articles/vault-directory-for-ai/showcase/vault-placement-contract/scripts/run-codex-live.mjs
+```
+
+Deterministic replay currently proves:
+
+- Valid plan = `0`.
+- Orphan/unaccounted item = `51`.
+- Folder-role mismatch = `52`.
+- Unstable/unknown root = `53`.
+- Sensitive item placed rather than rejected = `54`.
+- Duplicate canonical destination = `55`.
+- Unicode source and destination paths exist and pass validation.
+- Manifest and synthetic-vault inventory are unchanged.
+
+The reference valid plan is frozen too: 12/12 accounted, 11 placed, and one `SENSITIVE-marker` item rejected, whose `destination` must be `null`. One row is:
+
+```json
+{
+  "source_item": {
+    "id": "inbox-08",
+    "path": "00_收件箱/Obsidian-help-目录摘录.md",
+    "title": "Obsidian help 目录摘录"
+  },
+  "action": "place",
+  "destination": "50_资源/Obsidian/vault-help-目录摘录.md",
+  "role": "resource",
+  "canonical": true,
+  "sensitivity_decision": "retain-source-boundary"
+}
+```
+
+The initial writer-side nested run did not start successfully in the restricted environment; that historical failure was not rewritten as success. The outer controller subsequently reran the same frozen prompt, schema, and fixture. Fresh `gpt-5.5` successfully wrote `reports/placement-plan.json` and `reports/placement-plan.md`, and passed the validator. The result was 12/12 accounted, 11 placed, and 1 rejected; additionally:
+
+- Fixture manifest hash did not change.
+- Synthetic-vault inventory did not change.
+- No source file was moved.
+- The only new paths were the two `reports/placement-plan.*` files.
+- The raw run stays outside the worktree; only a redacted summary and final reports remain in the repository.
+
+This gives two layers of evidence: the model generates a plan by contract, while the validator determines whether it crosses the `51/52/53/54/55` boundaries. An independent read-only final review then confirmed the chain with `96/100`, `0 blocker / 0 major / 0 minor`, and visual PASS; only then was this article marked `verified`.
+
+## Failure modes and a minimal audit plan
+
+Writing a contract does not mean drift never occurs. What works is turning failure modes into audit gates.
+
+| Gate | Symptom | Meaning | Minimum repair action |
+| --- | --- | --- | --- |
+| `51` | orphan / unaccounted item | Material is in the manifest but has no unique disposition in the plan | Complete every item’s action before discussing automated moves |
+| `52` | folder-role mismatch | Path exists but role is wrong | Correct the role decision before changing path |
+| `53` | unknown root | A root outside the contract appears, or `00_Inbox` is used as destination | Immediately return to declared roots |
+| `54` | sensitive placed | Rejected material was inserted into the shared vault | Remove wrong placement and return to reject/null |
+| `55` | duplicate canonical destination | Two items compete for the same target path | Retain one canonical item; change the other path or role |
+
+I recommend a minimum audit plan with only four actions:
+
+1. **Before every routing run**: count inbox items first to avoid omissions.
+2. **After every routing run**: run the validator to ensure no `51/52/53/54/55`.
+3. **Once a week**: check whether `00_Inbox` has become long-term storage; do not turn it into a dust pile.
+4. **Before every public share**: recheck whether `50_Resources` and `20_Knowledge` were mixed, and whether sensitive items truly stayed on the reject rail.
+
+The value of this audit plan is not “more automation,” but making directory maintenance a fixed gate rather than subjective feeling.
+
+## When not to use this method
+
+This placement contract is useful, but not every vault deserves it.
+
+- If your vault is mainly private diary, temporary fragments, or life records rather than shared or automated material, do not rush to write everything as an agent contract.
+- If you do not yet understand the boundary between projects, knowledge, output, resources, and system, manually organize a few samples first rather than batch-automating immediately.
+- If you rely on nested vaults, official documentation already warns that internal links may not update correctly; on that premise, the path contract itself is unstable.
+- If you put all state into the directory tree instead of using properties for in-file state, you will only create deeper, more fragile hierarchy.
+- If you actually need repository diffs, rollback, and an approval chain, improve your Git workflow rather than using a directory contract as a substitute for version control.
+
+In one sentence: **use a placement contract when the problem is “where should new material go, what should be rejected, and how should it be audited later”; do not force it onto another problem.**
+
+## Exercise: write the first placement contract for your own vault
+
+Do not begin with “I need a perfect directory tree.” Begin with 10–20 real samples instead.
+
+1. Choose a small scope that will not expose privacy and contains only public or synthetic material you permit an Agent to handle.
+2. Write 4–6 role roots, and give each root a one-sentence single-responsibility description.
+3. Write a canonical-path template for every material type, specifying whether `00_Inbox` is intake only.
+4. Write reject conditions separately: what must never enter the shared vault.
+5. Finally add a minimal validator or checklist covering orphan, wrong role, unknown root, and sensitive placement.
+
+Completion criteria should not be abstract. You should be able to answer:
+
+- Which signals are checked first for any new item?
+- Which role does it enter?
+- What is the canonical path?
+- Which cases are always rejected?
+- After placement, how can you prove there was no omission, misplacement, or duplicate canonical path?
+
+If you can write these five answers clearly, your directory tree has already become a contract rather than a taxonomy.
+
+## Sources and further reading
+
+- Obsidian official documentation: [How Obsidian stores data](https://obsidian.md/help/Files%2Band%2Bfolders/How%2BObsidian%2Bstores%2Bdata)
+- Obsidian official documentation: [Manage vaults](https://obsidian.md/help/Files%2Band%2Bfolders/Manage%2Bvaults)
+- Obsidian official documentation: [Properties](https://obsidian.md/help/properties)
+- OpenAI official documentation: [Introducing Codex](https://openai.com/index/introducing-codex/)
+- Claude Code official documentation: [How Claude remembers your project](https://code.claude.com/docs/en/memory)
+- Teaching reference: [Johnny.Decimal](https://johnnydecimal.com/)
+- Chinese thematic map: [Obsidian AI Orange Book](https://github.com/alchaincyf/obsidian-ai-orange-book)
+
+Official material supports the current facts in this article concerning vaults/folders/Markdown/plain text/external refresh/`.obsidian`/nested-vault warning/properties. Johnny.Decimal only helps explain the teaching value of “shallow, predictable structure”; it does not establish the numbered roles here. `Obsidian AI Orange Book` is authored by Huashu / `alchaincyf`; this article uses it only as a Chinese thematic map, retaining its link and author explanation under the learning/exchange attribution boundary in its README, and **copies none of its PDF body text, screenshots, or images**.

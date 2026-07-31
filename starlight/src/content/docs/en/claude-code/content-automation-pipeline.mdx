@@ -1,0 +1,439 @@
+---
+title: "Turn One-Off Fetch-and-Summarize Work into a Recoverable Pipeline: Draft with Claude Code, Then Wait for Human Approval"
+description: Turn “fetch two sources and produce a weekly report” into a recoverable, traceable, draft-only-by-default Claude Code content pipeline using two fixed offline snapshots and seven gated stages.
+sidebar:
+  order: 8
+difficulty: intermediate
+source_repo: alchaincyf/claude-code-orange-book
+source_url: https://github.com/alchaincyf/claude-code-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-11"
+reading_time: 18 minutes
+research_path: research/articles/content-automation-pipeline
+showcase_path: research/articles/content-automation-pipeline/showcase/weekly-brief-pipeline
+showcase_status: verified
+quality_score: 100
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Intermediate | 18 minutes | 2026-07-11 | LearnPrompt Editorial Team |
+
+You ask Claude Code to “fetch two sources, turn them into this week’s AI briefing, and ideally make it a publication candidate.” It may indeed give you a decent-looking Markdown file. But three questions you least want to see immediately follow:
+
+1. If one source lacks `source_url`, will it describe damaged data as “there was nothing today”?
+2. If the same item appears in both sources, how does it deduplicate it and preserve the selection rationale?
+3. If you have not explicitly approved it, will it treat a “draft” as “ready to publish”?
+
+These questions share a cause: **one-off fetch + summarize + publish** compresses too many states into a single action. You only see a piece of copy, not what happened in between, and cannot locate an error in “fetch failed,” “field damaged,” “deduplication unclear,” “score unexplained,” or “human approval never happened.”
+
+This tutorial is not about writing another fetching script. It shows how to turn the request into a seven-stage content pipeline that is **recoverable, traceable, draft-only by default, and eligible for publication only after human approval**. To make that concrete, this article includes a fully offline, zero-secret Showcase: two fixed snapshots run through a “dual-source AI weekly briefing” flow, producing a Markdown draft with `source_url` and selection reasons, and actually demonstrating three negative cases:
+
+- A source record missing `source_url` stops at `normalize` with exit code `21`; it is never misreported as “no content today.”
+- A draft intentionally corrupted before `verify` stops at `verify` with exit code `23`; a broken downstream contract never silently reaches a candidate.
+- Without a human-approval artifact, the flow stops at `approve` with exit code `31`; it never goes straight to a publication candidate.
+
+First, an important boundary: Claude Code’s official documentation does not define a content pipeline with the terms `snapshot / normalize / dedupe / score / draft / verify / approve`. Official material provides workflow building blocks and safety boundaries such as **workflows / hooks / permissions / skills**. This article builds an auditable operational model for content production on top of those primitives. You will see that distinction throughout, because mixing “official capability” with “this article’s model” is one of the most common serious flaws in tutorials of this kind.
+
+![Seven-stage state progression for a dual-source AI briefing, plus normalize, verify, and approve failure branches](/images/articles/content-automation-pipeline/pipeline-state-gates.svg)
+*Caption: The upper half shows the successful seven-stage path: frozen snapshots, a field contract, deduplication, scoring, drafting, verification, and approval each persist their results in turn. The lower half shows three real failure branches: missing `source_url` stops at `normalize`, a broken draft contract stops at `verify`, and missing human approval stops at `approve`. The manifest, draft, publish-candidate, `run-result.txt`, and `command-summary.txt` in the diagram all correspond to real Showcase artifacts; the latter two are redacted frozen captures read back after raw capture in an `os.tmpdir()` isolation directory.*
+
+## What you will be able to do after reading
+
+You will take away four directly reusable things:
+
+1. A framework for turning a “one-off fetch-and-summarize request” into a recoverable pipeline, instead of continuing to rely on one long prompt.
+2. A real runnable dual-source weekly-briefing Showcase: fixed snapshots in, a Markdown draft with `source_url` and selection reasons out.
+3. Exit codes and artifacts for three negative cases, proving that missing source fields are not described as “nothing to write today,” and that a broken draft contract or missing approval are not described as “ready to publish.”
+4. A safer boundary: a model should at most handle intermediate summary rewriting; it should neither absorb data-quality errors nor replace human approval.
+
+This article’s non-goals are equally explicit:
+
+- It does not build a real-time news-fetching product. The Showcase is an offline replay: no network, API, or secret is required.
+- It does not compare which model writes a better weekly report. The focus is the state machine and evidence chain, not model benchmarks.
+- It does not demonstrate real external publication. The successful path goes no farther than a local `publish-candidate/`, and explicitly records `external_publish_triggered: false`.
+
+## Align with official boundaries first: Claude Code provides workflow primitives, not ready-made terminology
+
+If you do not align with the official boundary first, it is easy to misstate your own process as a standard practice officially recommended by Claude Code. The three kinds of official material most relevant here are workflows, hooks, and permissions.
+
+### Workflow material shows how to isolate, review before editing, and script work
+
+The Claude Code `Common workflows` page has three points directly relevant to this article.
+
+First, it explicitly presents **worktrees** as a way to work in parallel and in isolation: use separate checkouts when working in two terminals to avoid colliding edits. For a content pipeline, that means you can put “write the tutorial” and “run the weekly-briefing Showcase” in different worktrees or sessions rather than letting one temporary experiment make the primary workspace untraceable.
+
+Second, it presents **plan mode**: read files and form a plan first, then write to disk after you approve. It establishes an editing boundary of “review before changing.” That resembles the problem here, because we likewise do not want one vague instruction to jump across every intermediate state and leave only an unexplained result.
+
+Third, the official workflow treats **connecting Claude to scripts** as a normal workflow, not a side path. This is especially important for content pipelines. The reusable part should not remain forever in chat; it should be captured in zero-secret scripts, fixtures, and auditable outputs.
+
+:::note[The “seven-stage pipeline” is not official terminology]
+The official workflow page discusses general workflow primitives such as worktrees, plan mode, batch processing, and session recovery. It does not define a content pipeline as `snapshot / normalize / dedupe / score / draft / verify / approve`. These names are used here to make the content-production state machine clear.
+:::
+
+### Hook material shows which actions must deterministically happen
+
+Claude Code’s official `hooks-guide` and `hooks` reference make a direct point: hooks are a **deterministic control layer** at lifecycle events. At an event such as `PreToolUse`, they can receive structured input and make a mechanical decision with `deny / ask / allow` or an exit code.
+
+The value for content pipelines is not that we must write a Hook now. It establishes a criterion:
+
+- Which actions are merely recommendations? For example, “make the summary sound natural.”
+- Which actions must actually happen? For example, “do not advance to a publication candidate without human approval.”
+
+The former can stay with the model or editor’s judgment; the latter must become a mechanical gate. The `approve` stage in this article follows exactly that idea. The Showcase does not connect a real Hook or publish externally, but it makes “an approval artifact must exist” the deterministic final gate rather than a soft reminder.
+
+### Permissions material shows who the real arbiter is
+
+The Claude Code `permissions` page makes a crucial boundary explicit: the true executor of allow / ask / deny is the **Claude Code permission system**, not your prompt, and not a sentence in `CLAUDE.md` saying “please publish carefully.”
+
+That directly changes how to understand “enter a publication candidate only after human approval.”
+
+If you only write the requirement in natural language, the system has no real arbiter. A model can easily interpret “a good draft was generated” as “the task should continue to completion.” This article therefore makes approval a separate artifact: only an approval file permits entry into `publish-candidate/`; without it, the process stays at `draft`, even if every previous stage succeeded.
+
+The boundary may look slightly clumsy, but it is far more reliable than “don’t forget to confirm.”
+
+## Why “one-off fetch + summarize + publish” so easily describes failures incorrectly
+
+When teams first automate content, they often begin with a convenient-looking sentence:
+
+> Fetch two AI-update sources, organize them into this week’s briefing, and if everything looks good, generate the publication copy.
+
+Its problem is not lack of detail. It crushes five very different states into one action:
+
+1. What is the fetched input: fixed snapshots or temporary live fetches?
+2. Are fields complete, especially `source_url`, title, time, and summary?
+3. How are duplicates handled? When the same news appears twice, which copy remains?
+4. What is the selection rationale? Why did this item enter this week’s draft and that one not?
+5. Is there a human gate between a draft and a publication candidate?
+
+Once those states are flattened, you repeatedly encounter three situations that look successful but are actually wrong.
+
+The first is a false empty result. A field is damaged, a source is down, or parsing fails, yet the system says “there is nothing worth writing today.” The editor sees an empty draft and never learns that the true cause is data quality.
+
+The second is false deduplication. Both sources mention the same update, but only one remains in the draft. Readers may not notice, but the next editor cannot tell whether it was deliberately deduplicated or accidentally overwritten.
+
+The third is false completion. The system has written Markdown and therefore assumes the task is complete, even conflating “publishable,” “published,” and “uploaded as a candidate.”
+
+The common repair is not “write a longer prompt.” It is to split the action into states.
+
+## Replace one long prompt with a state machine: `snapshot → normalize → dedupe → score → draft → verify → approve`
+
+What this article finally establishes is not “smarter summary wording,” but a state machine. Think of it this way: **each stage solves only one problem and leaves the artifact needed for the next stage to take over**.
+
+### 1. `snapshot`: recognize only frozen inputs
+
+The first stage does one thing: confirm that inputs are two fixed snapshots, not sources fetched and rewritten at the same time. In the Showcase, both snapshots are offline JSON:
+
+- `source-anthropic.snapshot.json`
+- `source-openai.snapshot.json`
+
+This may look plain, but it determines whether the whole pipeline can be replayed. Once snapshots are frozen, the next editor always knows exactly which material this weekly briefing was based on. If you later add live fetching, it can only be an upstream step that “writes a new snapshot”; it must not let fetching directly affect the middle and end states.
+
+### 2. `normalize`: make the field contract strict
+
+The second stage is deliberately not called “clean up along the way.” It is `normalize` because it is fundamentally the first truth gate.
+
+Every Showcase record must contain:
+
+- `id`
+- `title`
+- `source_url`
+- `published_at`
+- `summary`
+- `tags`
+
+Any missing value is not a minor issue, especially `source_url`. Without `source_url`, the item cannot be traced; if it cannot be traced, it should not enter a draft, much less be treated as “there was no content today.”
+
+The principles are therefore strict:
+
+- Only complete fields may proceed downstream.
+- Missing fields stop immediately and record the specific error.
+- On stopping, explicitly write `no_content: false` to tell both system and editor: this is not an absence of content; the content is damaged.
+
+### 3. `dedupe`: make “why only one remains” into evidence
+
+In a dual-source content stream, duplicates are almost inevitable. The real question is not “will duplicates happen?” but “can you still explain the result after they do?”
+
+This Showcase deduplicates by `source_url` and records collapsed duplicates in `dedupe.manifest.json`. The benefit is not a sophisticated algorithm. It turns “only one remains” from an unexplained phenomenon into a recorded choice: this source is a duplicate, so retain A and collapse B.
+
+### 4. `score`: preserve selection reasons, not just results
+
+If you let a model improvise freely, it can certainly “pick several things that look important.” The difficult part comes a week later when someone asks: why these four? Why not those two?
+
+The Showcase intentionally uses transparent, unsophisticated rules:
+
+- Match the `claude-code` or `codex` topics;
+- Directly concern workflow, hooks, permissions, or verification;
+- Come from official documentation;
+- Have a high human importance rating.
+
+Its purpose is not to find the optimal briefing. It forces the system to record “why it was selected.” Consequently, every selected item in `score.manifest.json` carries a selection reason, which is then copied into the draft itself.
+
+### 5. `draft`: the default end state can only be a draft
+
+This is the most important practical difference in the article. Many content pipelines treat “generate Markdown” as the natural endpoint; this article does the opposite and treats it as the **default endpoint**.
+
+In other words, reaching `draft` is not “one step short of publishing.” It is “the task should stop here by default.” What remains is an editable, reviewable, handoff-ready draft, not a semi-finished product disguised as a final result.
+
+Each generated Showcase draft retains:
+
+- `source_url`
+- Source snapshot
+- Publication time
+- Selection reason
+- Summary
+
+If these fields are absent from the draft, the pipeline has already drifted from its central traceability goal.
+
+### 6. `verify`: first check that the draft contract remains intact
+
+`verify` is not responsible for scoring again. It checks whether `draft` faithfully retains the facts and reasons fixed in the previous five stages. At minimum, it confirms:
+
+- Every selected record retains its `source_url` in the draft;
+- Selection reasons remain;
+- No duplicate `source_url` reappears after deduplication.
+
+This exists to catch cases where inputs and scoring were sound but post-processing damaged the draft. In the Showcase `verify-failed` scenario, after `draft` it intentionally changes `openai-codex-cli`’s `source_url` to an incorrect value, then lets `verify` genuinely exit with `23`.
+
+### 7. `approve`: only an approval artifact may promote the state
+
+`approve` promotes state:
+
+- With an approval artifact, the draft is copied to the local `publish-candidate/`;
+- Without one, it remains at `draft` even if every prior stage is correct.
+
+This is the real implementation of “draft-only by default; enter a publication candidate only after human approval.” `verify` and `approve` are both terminal gates, but they are independent stages: they cannot be merged into one count or substitute for one another.
+
+## Showcase: how a dual-source AI briefing actually produces a draft, a candidate, and three negative cases
+
+The Showcase in this article lives at:
+
+```text
+research/articles/content-automation-pipeline/showcase/weekly-brief-pipeline/
+```
+
+Its goal is not to simulate an entire newsroom. It is a minimum zero-secret, offline-replayable, reviewable specimen of the state machine. The preferred one-command verification is:
+
+```bash
+node research/articles/content-automation-pipeline/showcase/weekly-brief-pipeline/scripts/verify-showcase.mjs
+```
+
+It replays four scenarios in order and checks `0/21/23/31`. It first writes each scenario’s complete stdout / stderr to an isolated raw directory under `os.tmpdir()`; only after writing succeeds does the script read the raw files back, remove session / request IDs and absolute temporary paths, trim to 80 lines / 6000 characters, and freeze them to `results/<scenario>/command-summary.txt` and root-level `results/run-result.txt`. To inspect an individual stage, run a single-scenario command:
+
+```bash
+node research/articles/content-automation-pipeline/showcase/weekly-brief-pipeline/scripts/run-pipeline.mjs --scenario success
+node research/articles/content-automation-pipeline/showcase/weekly-brief-pipeline/scripts/run-pipeline.mjs --scenario missing-source-field
+node research/articles/content-automation-pipeline/showcase/weekly-brief-pipeline/scripts/run-pipeline.mjs --scenario verify-failed
+node research/articles/content-automation-pipeline/showcase/weekly-brief-pipeline/scripts/run-pipeline.mjs --scenario no-approval
+```
+
+### Successful path: two snapshots, four selected items, and a local publication candidate
+
+The `success` scenario reads six records from two snapshots. Six remain after `normalize`; `dedupe` collapses one duplicate source; `score` selects four items. Complete raw stdout / stderr is first written to an isolated `os.tmpdir()` directory, then read back, redacted / trimmed, cleaned up in `finally`, and preserved as this frozen research-directory excerpt:
+
+```text
+RUN scenario=success
+PASS snapshot sources=2 items=6
+PASS normalize normalized=6
+PASS dedupe unique=5 removed=1
+PASS score selected=4
+PASS draft file=drafts/2026-07-11-dual-source-ai-weekly.md
+PASS verify fields=source_url+selection_reason
+PASS approve candidate=publish-candidate/2026-07-11-dual-source-ai-weekly.md
+RESULT candidate_ready exit=0
+```
+
+The key thing in these lines is not the final `exit=0`; every layer preserves a quantity and state. You receive not merely one document but an evidence chain: two snapshots, a normalize contract, a deduplication, an explainable score, a draft, a verification, and an approval artifact.
+
+The successful draft also intentionally remains traceable rather than over-polished. One item looks like this:
+
+```md
+### Claude Code permissions page clarifies deny ask allow precedence
+- source_url: https://code.claude.com/docs/en/permissions
+- Source snapshot: Anthropic Docs Snapshot
+- Published at: 2026-07-09
+- Selection reason: Matches a core AI coding tool topic; directly explains workflow, gating, or verification; comes from an official documentation snapshot suitable as this week’s baseline; human importance=3
+```
+
+It does not seek the smoothness of a final human-written weekly report. It prioritizes what an editor needs when taking over: where it came from, why it was selected, and that it is still only a draft.
+
+### Why the successful path still does not mean “published”
+
+Even when the `success` scenario receives an approval artifact, the Showcase only copies the draft to local `publish-candidate/`. It does not send it out, call a webhook, or claim “published.” The corresponding `approve.manifest.json` explicitly says:
+
+```json
+{
+  "status": "candidate_ready",
+  "candidate_created": true,
+  "external_publish_triggered": false
+}
+```
+
+That is the distinction emphasized throughout: **a publication candidate is not publication itself**. If you later connect a CMS, Feishu draft box, WeChat Official Account console, or another external system, that is a next-layer action and must add real permission or Hook gates.
+
+## Negative case one: why missing source fields must stop at `normalize`
+
+The `missing-source-field` scenario deliberately removes `source_url` from the `openai-codex-cloud` record in the second snapshot. The result is neither “the system muddles through” nor “there was no content today”; it stops immediately:
+
+```text
+RUN scenario=missing-source-field
+PASS snapshot sources=2 items=6
+FAIL normalize missing_required_field=source_url entry=openai-codex-cloud
+RESULT blocked_data_quality exit=21
+```
+
+More importantly, it writes this `normalize.manifest.json`:
+
+```json
+{
+  "status": "blocked_data_quality",
+  "error_count": 1,
+  "no_content": false,
+  "note": "A missing field is treated as a data-quality block, not as no content today."
+}
+```
+
+That single `no_content: false` is the teaching core of the entire negative case. Many automated briefing failures are not failures to write copy; they are failures to describe a failure correctly. Editors then make further wrong decisions from the wrong state:
+
+- They think there really was no content today and stop investigating the data issue;
+- They think it is merely an ignorable warning and allow untraceable material into the draft;
+- They assume the model will fill in the source itself and eventually cannot say where any conclusion came from.
+
+If you remember only one design rule from this article, make it this: **damaged data and no content must be two different states.**
+
+## Negative case two: why a corrupted draft contract must stop at `verify`
+
+The `verify-failed` scenario uses normal snapshots and completes `snapshot`, `normalize`, `dedupe`, `score`, and `draft`. The only thing it deliberately does is change `openai-codex-cli`’s `source_url` to an incorrect value after `draft`, then hand it to `verify` for a mechanical check.
+
+The redacted excerpt is:
+
+```text
+RUN scenario=verify-failed
+PASS snapshot sources=2 items=6
+PASS normalize normalized=6
+PASS dedupe unique=5 removed=1
+PASS score selected=4
+PASS draft file=drafts/2026-07-11-dual-source-ai-weekly.md
+TAMPER draft mutated_field=source_url target=openai-codex-cli
+FAIL verify error_count=1
+RESULT failed_contract exit=23
+```
+
+The corresponding `verify.manifest.json` clearly records:
+
+```json
+{
+  "status": "failed_contract",
+  "error_count": 1,
+  "errors": [
+    "draft missing source_url for openai-codex-cli"
+  ]
+}
+```
+
+The teaching value is that it separates the input contract from the draft contract. Many pipelines check fields only at the entrance and assume drafting cannot go wrong. In real engineering, template composition, post-processing, and local human edits can all damage data that was previously correct. `verify` ensures that such damage stops at `verify` instead of entering `publish-candidate/`.
+
+## Negative case three: why missing human approval can only stop at `draft`
+
+The `no-approval` scenario uses normal snapshots, so `snapshot`, `normalize`, `dedupe`, `score`, `draft`, and `verify` all pass. The only reason it stops is the absence of an approval artifact.
+
+The redacted excerpt is:
+
+```text
+RUN scenario=no-approval
+PASS snapshot sources=2 items=6
+PASS normalize normalized=6
+PASS dedupe unique=5 removed=1
+PASS score selected=4
+PASS draft file=drafts/2026-07-11-dual-source-ai-weekly.md
+PASS verify fields=source_url+selection_reason
+BLOCK approve missing_human_approval
+RESULT awaiting_human_approval exit=31
+```
+
+Notice how different this is from the previous negative case. This is not damaged data or a missing field; the process intentionally stops in the state “the draft is ready to view, but no person has approved it.” Therefore `approve.manifest.json` should look like this:
+
+```json
+{
+  "status": "awaiting_human_approval",
+  "approval_present": false,
+  "candidate_created": false
+}
+```
+
+Its value is preventing a very common misunderstanding: **“since the draft exists, that counts as done, right?”**
+
+No. Until the system receives an approval artifact, the task remains “waiting for a human to take over,” not “ready to publish.” The earlier this boundary is made strict, the less likely later automation is to cause an incident.
+
+## Where the model belongs: it may replace the summary layer, not swallow the state machine
+
+Many readers now ask: what is the model still useful for? The answer is: a great deal, but its position must be constrained.
+
+In this article’s Showcase, all summary text comes from frozen `summary` fields in fixtures, and the script only assembles a template. This is deliberate: we first want to prove that even with no model at all, the pipeline can run through the most important boundaries.
+
+If you later want Claude Code to generate the “summary,” place it after `score` and before `draft`, and let the model do only this:
+
+- Rewrite summaries of selected items to sound more natural and fit the language style of the weekly briefing.
+
+But regardless of the model, the following three rules should not change:
+
+1. Factual input still comes from frozen snapshots, not model imagination.
+2. Every output still preserves `source_url` and its selection reason, not merely attractive wording.
+3. Without an approval artifact, it cannot enter a publication candidate.
+
+So the more precise statement is: **the model is a replaceable summary layer, not the arbiter of the entire pipeline and not a publish button.**
+
+## When this approach is worth using, and when it is not
+
+This approach is not intended to make every research task heavier. It is intended to make certain tasks reliably handoffable.
+
+### When it is worth using
+
+- You repeatedly prepare the same kinds of weekly briefings, intelligence summaries, or content-candidate collections.
+- You need to hand results to another editor, operator, or reviewer.
+- You do not accept “no content today” and “the fields are damaged” being described as the same thing.
+- You need a clear distinction between draft, candidate, and published.
+
+### When it is not worth using
+
+- You are privately skimming two sources quickly, with no plan to reuse or hand off the result.
+- Your source structure is still so chaotic that you have not even decided on a minimum field contract.
+- You have no human-approval step at all, or the team is unwilling to inspect manifests and failure states.
+
+The criterion is simple: if the next person taking over needs to know “what you actually saw, why you selected this way, and why the process stopped here,” this approach is worthwhile.
+
+## Exercise: rewrite your own “one-off summary request” as a state machine
+
+Pick a request you say often, such as:
+
+> Fetch three product updates and organize them into an internal morning-briefing draft.
+
+Then do only four things:
+
+1. Write a minimum snapshot format: which fields must every item have?
+2. Decide which missing fields must block immediately rather than be skipped automatically.
+3. State the difference between `draft` and `publish-candidate`.
+4. Choose an acceptable human-approval artifact: JSON, YAML, or a form export are all fine, but it must be auditable.
+
+The acceptance criterion is not “you wrote a powerful prompt.” It is “you can list at least three different failure states and make each stop at a different stage.”
+
+## Sources and further reading
+
+- Official workflow material:
+  - [Claude Code Common workflows](https://code.claude.com/docs/en/common-workflows)
+  - [How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works)
+  - [Extend Claude Code](https://code.claude.com/docs/en/features-overview)
+- Official Hook and permissions material:
+  - [Automate actions with hooks](https://code.claude.com/docs/en/hooks-guide)
+  - [Hooks reference](https://code.claude.com/docs/en/hooks)
+  - [Configure permissions](https://code.claude.com/docs/en/permissions)
+- Official Skill material:
+  - [Extend Claude with skills](https://code.claude.com/docs/en/skills)
+- Secondary topic map and license:
+  - [Claude Code Orange Book](https://github.com/alchaincyf/claude-code-orange-book)
+- This article’s research pack and Showcase:
+  - [content-automation-pipeline research pack](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/content-automation-pipeline)
+
+Official documentation supports this article’s statements about the current behavior of workflows, Hooks, permissions, and Skills; the check date is 2026-07-11. `alchaincyf/claude-code-orange-book` is retained only as a Chinese topic map with attribution and link; its README declares CC BY-NC-SA 4.0, this article does not reuse its screenshots, and it is not treated as an authority for current product behavior. This article’s `snapshot / normalize / dedupe / score / draft / verify / approve` is a teaching model built on official primitives; the real output and negative-case evidence are in the research pack above.

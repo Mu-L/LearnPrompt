@@ -1,0 +1,317 @@
+---
+title: "The Five Moves of a Loop: Discover, Handoff, Verify, Persist, Schedule"
+description: Move from one-off Agent tasks to sustainable loops, and run a minimal Loop that saves state, verifies results, and decides what happens next.
+sidebar:
+  order: 1
+difficulty: intermediate
+source_repo: alchaincyf/loop-engineering-orange-book
+source_url: https://github.com/alchaincyf/loop-engineering-orange-book
+updated_from: 2026-07
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-10"
+reading_time: 14 min
+research_path: research/golden-samples/loop-five-moves
+showcase_path: research/golden-samples/loop-five-moves/showcase
+showcase_status: verified
+quality_score: 89
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Intermediate | 14 min | 2026-07-10 | LearnPrompt Editorial Team |
+
+Every morning at nine, you ask an Agent to gather news, write summaries, and generate story ideas. The next day, it starts over from scratch: repeating yesterday's links, unaware of what has already been processed, and unable to pause when fact checking fails. You have set up a scheduled task, but you do not have a real Loop.
+
+**Re-running a prompt on a schedule is not Loop Engineering.**
+
+The key to a Loop is not “running forever.” It is ensuring that across multiple executions, the system still knows where work comes from, who receives it, how success is determined, which state must remain, and whether to continue, retry, or stop next.
+
+> A Harness makes one execution reliable; a Loop lets the next execution continue from the evidence of the previous one.
+
+## What You Will Be Able to Do
+
+You will master a five-move framework that you can draw directly on a whiteboard:
+
+```text
+发现 Discover
+  ↓
+交接 Handoff
+  ↓
+验证 Verify
+  ↓
+持久化 Persist
+  ↓
+调度 Schedule ──→ 下一次发现
+```
+
+You will also run a minimal Loop that makes no model calls at all. It deliberately uses a deterministic mock worker, so we can first verify the loop structure itself before discussing how to connect Claude Code, Codex, or another Agent.
+
+![The five moves of Loop Engineering bring evidence from one execution into the next discovery](/images/articles/five-moves/loop-five-moves.svg)
+*Caption: Discover, Handoff, Verify, Persist, and Schedule form a closed loop across executions; verification results must be persisted first, so the next discovery does not start from zero.*
+
+:::note[Loop Engineering is still an emerging term]
+This article's five-move framework synthesizes Addy Osmani's writing on Loop Engineering, research on long-task Harnesses, and the Orange Book's topic map. It is a practical teaching model, not a formal industry standard.
+:::
+
+## What Layer Separates a Loop from a Harness?
+
+Suppose you ask a coding agent to fix a bug.
+
+A Harness focuses on this execution:
+
+- Which project rules the Agent reads;
+- Which tools, permissions, and sandboxes it can use;
+- How it runs tests;
+- How feedback is returned to the worker after failure;
+- Who decides that a diff is acceptable.
+
+A Loop focuses on control across executions:
+
+- Which queue the bug is discovered from;
+- How to avoid claiming it again on the second run;
+- Which artifacts to save when one round ends;
+- Whether verification failure means retrying immediately, retrying later, or escalating to a human;
+- When to check again after the queue is empty.
+
+A Loop without a Harness will reliably mass-produce unverifiable results; a Harness without a Loop still requires people to discover tasks, move state, and restart each round.
+
+## 1. Discover: Decide What Is Worth Entering the Loop
+
+The discovery layer is not “throw every input at the Agent.” It must compress the external world into a bounded candidate queue and handle:
+
+- Sources: folders, issues, RSS, databases, messages, or monitoring alerts;
+- Time window: look only at changes after the last watermark;
+- Deduplication: use message IDs, URLs, content hashes, or business keys;
+- Ordering: risk, urgency, value, and cost;
+- Filtering: expired items, completed items, and items that do not meet prerequisites.
+
+The minimal example reduces the world to `tasks/*.json` and finds the first incomplete task among tasks sorted by filename:
+
+```js
+const task = tasks.find(
+  (candidate) => !state.completed.includes(candidate.id),
+);
+```
+
+It looks ordinary, but it has already answered two key questions: where tasks come from, and how repeated processing is avoided.
+
+### Failure Mode: Time Window Too Narrow
+
+If a daily report queries only the last ten minutes, and the previous execution failed half an hour ago, the next one may never see the missed content. Production Loops commonly use a wider lookback window, then deduplicate locally by ID; they also save a watermark for “where the last successful processing reached.” The discovery layer should prioritize “do not miss” before dealing with “do not duplicate.”
+
+## 2. Handoff: Pass Structured Tasks, Not Vague Conversations
+
+Discovery results cannot live only in an Agent's context. At minimum, the downstream worker needs:
+
+```json
+{
+  "id": "uppercase-title",
+  "input": "learn prompt",
+  "acceptance": {
+    "expected_text": "LEARN PROMPT"
+  }
+}
+```
+
+The example writes it to `handoff.json` in each run directory. That way, even if the process exits, the model changes, or an independent reviewer takes over, the goal and acceptance criteria remain readable.
+
+A real handoff normally also includes allowed resources, forbidden actions, budget, deadline, upstream evidence, and whom to escalate to on failure. The principle is: **a handoff must be executable correctly even after leaving the original chat.**
+
+## 3. Verify: The Hardest and Most Essential Step in the Closed Loop
+
+Generating an output does not mean the task is complete. A Loop must separate outcome from acceptance:
+
+```js
+const verified = outcome.text === task.acceptance.expected_text;
+```
+
+This is only the smallest deterministic check. Different tasks can use different graders:
+
+| Task | Mechanically verifiable | Needs additional judgment |
+| --- | --- | --- |
+| Code changes | Unit tests, types, lint, build | Architecture quality, user experience |
+| Data organization | Schema, row count, unique keys, ranges | Whether business anomalies are reasonable |
+| Research articles | Links, citation coverage, dates, structure | Argument depth, Chinese quality |
+| Message publishing | Format, destination, deduplication, preview | Whether it should really be sent |
+
+Verification should be performed by an independent evaluator whenever possible. It can be a deterministic script, another model, or a human, but it should not merely ask the worker: “Do you think you finished?”
+
+### What If It Cannot Be Verified?
+
+Do not automate the loop yet. Downgrade the task to an assistive workflow: the Agent generates candidates, and only after human approval are they persisted as complete. Once you have accumulated enough failure cases, mechanize the stable parts.
+
+## 4. Persist: Save State That Can Continue Working
+
+After one execution ends, a Loop leaves at least two layers of state.
+
+### Fast State
+
+`state.json` supports fast decisions in the next run:
+
+```json
+{
+  "completed": ["uppercase-title"],
+  "runs": 1,
+  "last_task": "uppercase-title",
+  "last_result": "passed"
+}
+```
+
+### Run Artifacts
+
+`runs/uppercase-title/` saves traceable evidence:
+
+```text
+handoff.json
+outcome.txt
+verification.json
+```
+
+Do not stuff everything into one ever-growing log. State is responsible for “what to do next”; artifacts are responsible for “what actually happened then.” When a conclusion is disputed, you should be able to return to the original input, output, and grader result.
+
+## 5. Schedule: Decide Whether to Continue, Retry, or Stop Based on the Result
+
+Cron can only answer “when to wake up.” Loop scheduling must also read the result:
+
+```text
+验证通过 + 仍有任务 → continue
+验证通过 + 队列为空 → idle
+验证失败             → retry 或升级给人
+超过预算/连续失败      → stop
+```
+
+A production system should also add:
+
+- Exponential backoff and a maximum retry count;
+- Per-run and daily cost budgets;
+- Concurrency limits and task locks;
+- Human approval and reversible boundaries;
+- Low-frequency checks when there is no new work.
+
+An important ability of a mature Loop is not working continuously, but **knowing when not to work**.
+
+## Showcase: Run One Complete Five-Move Loop
+
+The example code is in the [research and Showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/golden-samples/loop-five-moves/showcase). It uses Node.js built-in modules and requires no dependencies, but the runtime environment must allow writes to the system temporary directory.
+
+Run from the repository root:
+
+```bash
+node research/golden-samples/loop-five-moves/showcase/demo-run.mjs
+```
+
+Actual output on 2026-07-10:
+
+```text
+1 DISCOVER uppercase-title
+2 HANDOFF uppercase-title
+3 VERIFY pass
+4 PERSIST uppercase-title:passed
+5 SCHEDULE idle
+Artifacts: /tmp/learnprompt-loop-...
+```
+
+The program creates tasks and run artifacts in the system temporary directory and does not pollute the repository. Then run the tests:
+
+```bash
+node --test \
+  research/golden-samples/loop-five-moves/showcase/test/loop-demo.test.mjs
+```
+
+The test does not only assert that the first run succeeds; it also calls the same Loop a second time. Because the task ID has been persisted, the second output is `DISCOVER idle`, and it does not process the task again.
+
+```text
+tests 1
+pass 1
+fail 0
+```
+
+### Why Not Use a Real Model?
+
+What this Showcase proves is the control plane: whether the five moves happen, whether artifacts are written, and whether state can prevent repeated processing. A real model adds networks, accounts, model versions, and randomness, making structural problems harder to locate.
+
+When connecting an Agent, replace only `mock-worker.mjs`, but keep the same input/output contract: the worker receives a structured task and run directory and returns an outcome; the Loop is responsible for verification and state, rather than allowing the worker to change its own completion record.
+
+## Upgrade the Minimal Example into a Real Daily Report
+
+Map the five moves to an “AI news story-ideas daily report”:
+
+### Discover
+
+Fetch a broad time window from multiple sources, deduplicate by URL, message ID, and title fingerprint, and put only new candidates into the queue.
+
+### Handoff
+
+Each candidate includes its original link, publication date, source, retrieval time, questions to answer, and fields that must not be fabricated.
+
+### Verify
+
+Check that the link is reachable, a date exists, and the summary does not exceed the source; send high-value story ideas to an independent reviewer or human sampling.
+
+### Persist
+
+Save processed IDs, source watermarks, daily artifacts, and reasons for rejection. Do not save only the final daily report, or you will be unable to explain omissions and incorrect selections.
+
+### Schedule
+
+Continue when the queue has content; back off when sources temporarily fail; alert on consecutive failures; wait for the next period after the daily report is generated. Keep a human publishing gate before sending to an external channel.
+
+At this point, the model is only one part of the worker. What makes the daily report continuously reliable is the Loop's management of time, evidence, and decisions.
+
+## Three Cases Where Human Boundaries Should Remain
+
+### Irreversible External Actions
+
+Publishing, transfers, deletion, mass messaging, and production configuration changes should wait for explicit approval at the final step.
+
+### Acceptance Criteria Are Still Changing
+
+If the team is still debating “what counts as a good story idea,” use the Loop first to collect candidates and evidence; do not automatically eliminate or publish.
+
+### Errors Can Accumulate Across Rounds
+
+When an incorrect summary is written into memory and cited as fact in the next round, it creates a contamination loop. State needs stricter validation, versioning, and rollback paths before it is written.
+
+## Common Anti-Patterns
+
+- **Only set a timer:** no deduplication, state, or result routing.
+- **Only retry:** re-run unchanged after failure, with no new evidence or backoff.
+- **The worker changes completion state:** the generator bypasses independent verification.
+- **Store only successful results:** failed inputs and grader evidence are lost, so improvement is impossible.
+- **Never idle:** call the model when the queue is empty, wasting cost and creating fake work.
+- **Use a model for every step:** add randomness where schemas, hashes, or tests could make a deterministic judgment.
+
+## Exercise: Draw a Repeated Task as Five Boxes
+
+Choose work you repeat at least once a week and fill out the template below:
+
+```yaml
+discover:
+  source: 工作从哪里来
+  dedupe_key: 怎样避免重复
+handoff:
+  required_fields: 下游离开聊天也必须知道什么
+verify:
+  mechanical_checks: 哪些可以确定性检查
+  human_gate: 哪些必须由人判断
+persist:
+  state: 下一轮快速读取什么
+  artifacts: 争议时回看什么
+schedule:
+  continue_when: 什么情况下继续
+  retry_when: 什么情况下重试
+  stop_when: 什么情况下停机或升级
+```
+
+If `verify` and `stop_when` are still blank, do not connect the task to a timer yet.
+
+## Sources and Further Reading
+
+- [Addy Osmani: Loop Engineering](https://addyosmani.com/blog/loop-engineering/)
+- [Loop Engineering Orange Book](https://github.com/alchaincyf/loop-engineering-orange-book)
+- [OpenAI: Harness engineering](https://openai.com/index/harness-engineering/)
+- [Anthropic: Effective harnesses for long-running agents](https://www.anthropic.com/engineering/harness-design-long-running-apps)
+- [Research package, code, and tests for this article](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/golden-samples/loop-five-moves)
+
+The Loop Engineering Orange Book uses the MIT License; this article retains attribution and uses it as a Chinese topical map. The five-move framework and its boundaries were reviewed against original engineering materials and a locally runnable experiment on 2026-07-10.

@@ -1,0 +1,260 @@
+---
+title: "OpenClaw Launch Decision: Deployment, Channel Security, and Recomputable Costs"
+description: Choose local, VPS, or managed templates using workload, trust boundaries, and budget formulas, then establish verifiable launch gates.
+sidebar:
+  order: 3
+difficulty: advanced
+source_repo: alchaincyf/openclaw-orange-book
+source_url: https://github.com/alchaincyf/openclaw-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-12"
+reading_time: 19 minutes
+research_path: research/articles/deployment-channels-cost
+showcase_path: research/articles/deployment-channels-cost/showcase
+showcase_status: verified
+quality_score: 100
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Advanced | 19 minutes | 2026-07-12 | LearnPrompt Editorial Team |
+
+You have connected a Telegram bot on your laptop: one message lets OpenClaw call a model, run tools, and reply. You are now ready to move it to the cloud so the team can use it around the clock. The real launch questions now appear: who receives messages after the laptop lid is closed? Does state survive a container rebuild? Who authenticates the public endpoint? Can strangers send DMs? When models, search, media, and tool calls drive up the monthly bill, how does the system degrade automatically?
+
+“Choose the cheapest cloud host” cannot answer these questions. The OpenClaw Gateway is a long-running process for routing, the control plane, and channel connections; a deployment option must simultaneously meet availability, persistence, exposure, trust-boundary, and budget constraints. This article provides a recomputable method. It neither copies fixed vendor quotes nor presents local estimates as vendor bills.
+
+## What you will be able to do
+
+After completing this article, you will be able to do five things:
+
+1. Choose local, VPS/container, or managed templates based on whether you need 24/7 operation, rely on local devices, require persistent state, and have a fault budget.
+2. Break costs into fixed infrastructure, model tokens, tools/media, channel plugins, egress, and observability instead of looking only at the host's monthly fee.
+3. Use replaceable variables to calculate a monthly budget, per-run ceiling, and peak concurrency, and design fallbacks and a kill switch.
+4. Put Gateway auth, DM pairing, group allowlists, SecretRef, and secret rotation into one security gate.
+5. Use RPC, channel live probes, health, logs, and doctor to prove that it really works instead of merely proving that a configuration file exists.
+
+![OpenClaw deployment cost control plane: the workload passes through topology, exposure and channel policies, a fixed and variable cost ledger, and budget guardrails before it is ultimately accepted or rejected; 111 through 115 respectively stop missing availability, uncontrolled exposure, missing cost items, credentials or false health, and missing budget circuit breakers.](/images/articles/deployment-channels-cost/deployment-cost-control-plane.svg)
+*Caption: Deployment is not a price-list multiple-choice question. A candidate can enter the launch queue only when workload, trust boundary, cost formula, and operational acceptance all pass.*
+
+## Write down the workload before choosing a deployment form
+
+First freeze a deployment card. Do not write unverifiable descriptions such as “traffic is low” or “used occasionally.” At minimum, specify these variables:
+
+| Decision variable | Question to answer | What it rules out |
+| --- | --- | --- |
+| `availability_required` | Available only while the operator is online, or 24/7? | 24/7 rules out local machines that sleep, close their lids, or frequently lose connectivity |
+| `persistence_required` | Must sessions, channel/provider state, and the workspace survive restarts? | Ephemeral containers without persistent volumes |
+| `local_device_required` | Must it operate local GUI, cameras, or files that exist only on the local machine? | Cloud-only execution may lose device capabilities |
+| `requests_per_day` | What are the average request volume and peak periods? | Sizes that cannot sustain peaks or rate limits |
+| `peak_concurrency` | How many runs can execute at the same time? | Options with too few resources or no concurrency guardrails |
+| `exposure` | Loopback only, an internal tunnel, or a public reverse proxy? | Exposure modes without matching authentication and origin policies |
+| `trust_boundary` | One person, a trusted small team, or multiple mutually untrusted tenants? | One shared Gateway cannot serve as an isolation layer for hostile multi-tenancy |
+| `recovery_target` | How long an interruption and how much lost state are acceptable? | Options without backups, recovery drills, or health-based restarts |
+
+The three candidate types are not ranked by “advancedness”; they solve different problems:
+
+### Local laptop or workstation
+
+This suits personal experiments, scenarios that depend on local device capabilities, and operation only while the operator is online. The default loopback exposure minimizes surface area, and the incremental host cost of existing hardware may be close to zero, though power, maintenance, and model API costs remain. Closing the lid, losing connectivity, system updates, and operator absence all affect availability, so do not describe “it runs on my computer” as a 24/7 commitment.
+
+### Always-on VPS or self-managed container
+
+This suits small teams that need channels connected all day and can maintain systems and backups themselves. You control images, volumes, reverse proxies, and upgrade cadence, while also taking on patches, disks, logs, alerts, and recovery. As of 2026-07-12, the official Docker documentation notes that source builds need at least 2 GB of RAM; on a VPS/public host, you must also check network hardening. A container itself is not persistence: state/workspace must live on managed volumes and be included in backups.
+
+### Managed templates
+
+Official paths from Railway, Render, Fly.io, and others reduce first-deployment friction, but they do not eliminate state or security concerns. The Railway template requires mounting a `/data` volume to retain state; Render's free plan sleeps and has no persistent disk, so redeployment resets state; Fly.io examples also require volumes and secrets. TLS, health checks, and restart capabilities supplied by a managed platform are infrastructure capabilities only. Gateway auth, channel policy, backups, and budgets remain your responsibility.
+
+Kubernetes is not “automatically production-grade” either. The official Kubernetes page explicitly calls the example a minimal starting point, not a production-ready deployment. Kubernetes can reduce total risk only when the team already has capabilities for cluster upgrades, PVCs, Secrets, network policies, observability, and recovery; otherwise it only increases the control plane.
+
+A practical selection order is: first eliminate candidates that do not meet 24/7 and persistence requirements, then eliminate candidates whose exposure and trust boundaries do not match, and only then compare the total cost and operational burden of those that qualify.
+
+## Gateway, exposure surface, and channel policy form one gate
+
+The official OpenClaw Gateway runbook describes Gateway as a long-running routing and control-plane process. The default bind is loopback; when a container environment is detected, the current documentation says the effective default can become `auto` and resolve to `0.0.0.0` for port forwarding. Therefore, “I did not explicitly configure public listening” does not mean a container necessarily binds only to loopback: you must inspect actual startup arguments, network mappings, and reverse proxies.
+
+For remote access, prefer retaining loopback and connecting through an SSH tunnel or controlled Tailscale path. For example, an SSH tunnel maps a remote Gateway to local `127.0.0.1`. If you do use non-loopback or a public proxy, you need at least:
+
+- A valid `gateway.auth` token/password, or an explicitly designed trusted-proxy mode;
+- Exact `allowedOrigins` for a non-loopback Control UI; do not treat `"*"` as a secure production default;
+- TLS termination, host firewall, and container port-exposure audits;
+- No tokens in tutorials, logs, command history, or screenshots; every configuration in this article uses placeholders only.
+
+Channel ingress also needs identity and scope controls. Official security documentation recommends first determining “who can speak,” then “where they can act”:
+
+| Scenario | DM policy | Group policy | Notes |
+| --- | --- | --- | --- |
+| Personal bot | `pairing` | `allowlist` + `requireMention` | Strangers pair first; group messages are handled only when mentioned |
+| Trusted small team | `allowlist` or `pairing` | Explicit group allowlist | List changes need an audit record |
+| Public service | Must not rely on `open` alone | Separate ingress, rate limits, and strong isolation | Public users expand prompt-injection, abuse, and cost risks |
+| No DMs | `disabled` | Allow required groups individually | Minimize unnecessary ingress |
+
+`dmPolicy="open"` and `groupPolicy="open"` explicitly expand the trust boundary; they are not the default completion state for “connecting a channel.” Nor should operator scopes be treated as isolation for hostile multi-tenancy: current official documentation treats one Gateway as one trusted operator domain. Mutually untrusted tenants should have separate Gateways and OS users/hosts; at higher risk, use separate VMs or machines.
+
+### What SecretRef solves, and what it does not
+
+Current official secrets documentation supports writing supported credentials as SecretRefs, resolved by an env, file, or exec provider into an in-memory snapshot at startup/reload. A production migration should at least run:
+
+```bash
+openclaw secrets audit --check
+openclaw secrets configure --apply
+openclaw secrets audit --check
+openclaw secrets reload
+```
+
+The commands are an operational sequence; before running them, read the complete documentation for your version. SecretRef can reduce plaintext credentials at rest, but it is not a process-isolation boundary; any old `.env`, backup, or unmigrated configuration readable by the agent may still leak. After rotation, reload and audit again; changing only the value in the secret manager is not completion.
+
+## Cost model: three ledgers for fixed, variable, and operational costs
+
+Host fees are only part of fixed costs. An auditable monthly formula can be written as:
+
+```text
+R = requests_per_day × days_per_month
+
+model_input  = R × input_tokens_per_request  ÷ 1,000,000 × input_price_per_million
+model_output = R × output_tokens_per_request ÷ 1,000,000 × output_price_per_million
+tool         = R × tool_calls_per_request × tool_cost_per_call
+media        = media_calls_per_day × days_per_month × media_cost_per_call
+
+monthly_total = fixed_infra
+              + model_input + model_output + tool + media
+              + channel_plugin + egress_observability
+```
+
+Every price here is a **replaceable input**. On the day of budget review, fill them in from official pricing/billing from your actual providers; do not copy example numbers from this article. OpenClaw `/status`, `/usage full`, and the Control UI can display tokens and estimated costs based on local pricing configuration and usage metadata; official documentation explicitly states that these session-derived totals are neither provider invoices nor lifetime billing ledgers. Subscriptions/OAuth/CLI runtimes may show only tokens or settle outside OpenClaw.
+
+Also add non-core model calls to the ledger: media understanding, embeddings, web/search, voice, third-party Skills, provider usage probes, and compaction can all call external services. Even if an item is currently free, retain a row and a ceiling because plans, free allowances, and billing can change.
+
+### A fully synthetic worked example
+
+This article's Showcase uses the following **example assumptions, not quotes**: 120 requests per day, 30 days per month, 4,500 input tokens and 1,200 output tokens per request, and two tool calls; there are eight media-processing calls per day. Example prices are input `$0.80/M`, output `$4.00/M`, tools `$0.002/call`, and media `$0.015/call`. The example channel plugin is `$6/month`, and egress plus observability are `$8/month`.
+
+The calculation is:
+
+```text
+R = 120 × 30 = 3,600 requests/month
+input  = 3,600 × 4,500 / 1,000,000 × 0.80 = $12.96
+output = 3,600 × 1,200 / 1,000,000 × 4.00 = $17.28
+tool   = 3,600 × 2 × 0.002                  = $14.40
+media  = 8 × 30 × 0.015                     = $3.60
+variable subtotal                            = $48.24
+optional channel + egress/observability      = $14.00
+```
+
+If the example fixed-cost input for a self-managed VPS is `$18`, the example monthly total is `$80.24`; if the managed-template fixed input is `$30`, it is `$92.24`. The local candidate has an example fixed increment of `$0` and a lower total, yet is eliminated because the workload requires 24/7 operation. The final VPS choice is therefore not because it is “the cheapest overall,” but because it costs less among qualifying candidates that meet 24/7, persistence, authentication, and channel-policy requirements.
+
+## Budget guardrails must act before launch
+
+“Check the bill at the end of the month” is not cost control. Establish at least five layers of guardrails:
+
+1. **monthly cap**: When accumulated projected or provider-reported spend approaches the monthly ceiling, disable nonessential media/search and then switch to a lower-cost model.
+2. **per-run cap**: Stop further loops when a run reaches its token, tool-call, or monetary ceiling, and return a recoverable state.
+3. **rate limit**: Limit request rates by user, channel, and globally to prevent public ingress from being flooded.
+4. **concurrency limit**: Limit simultaneous runs and queue them instead of letting peaks amplify memory and model calls at once.
+5. **fallback and kill switch**: Use an approved alternative model when the primary model exceeds budget or is rate-limited; when anomalies persist, be able to shut down expensive tools, channels, or the entire ingress.
+
+Guardrails need explicit owners and trigger actions. For example: alert when projected total reaches 70% of the monthly cap; at 85%, switch to a fallback and disable media; at 100%, trigger the kill switch and retain only an administrator diagnostic path. The percentages are team policy, not an OpenClaw standard. Also distinguish local estimates from vendor billing: local usage enables rapid control, while final settlement and anomaly investigation still reconcile against provider-reported data.
+
+## Launch acceptance: configuration exists does not mean the channel is healthy
+
+A minimal read-only acceptance chain is:
+
+```bash
+openclaw gateway status --require-rpc
+openclaw channels status --probe
+openclaw health --json
+openclaw doctor
+openclaw logs --follow
+```
+
+What each line proves:
+
+- `gateway status --require-rpc` checks more than the service process and WebSocket connection: it also requires read-scope RPC success. It does not prove that administrator writes or business tasks will certainly succeed.
+- `channels status --probe` runs a per-account live probe and optional audit when Gateway is reachable. When Gateway is unreachable, the CLI may fall back to a config-only summary, so reports must state which case occurred.
+- `health` provides a Gateway-view health snapshot; a container platform's `/health` proves only the HTTP endpoint state and cannot replace a channel socket probe.
+- `doctor` checks configuration/service problems; it cannot replace an actual round trip of messages.
+- logs confirm reconnections, rejections, pairing, rate limits, and failure causes. Redact logs before archiving; do not retain message bodies, tokens, or account identifiers.
+
+A launch receipt should at minimum include: version, deployment commit/image digest, persistent-volume and backup checks, actual bind/exposure, auth mode, DM/group policy, RPC results, channel-probe results, budget cap, fallback/kill switch, and rollback owner. Without these fields, “deployment succeeded” cannot imply “safe to operate.”
+
+## Showcase: deployment-budget-safety-gate
+
+Reproducible materials are located at:
+
+```text
+research/articles/deployment-channels-cost/showcase/
+```
+
+The only inputs are synthetic workload, candidate topologies, and example pricing assumptions. It does not read actual OpenClaw configuration, cloud accounts, channel tokens, or account IDs, and it performs no deployment. A deterministic script first generates a recommendation, then validates the report against a fixed fixture hash and formula:
+
+```bash
+node research/articles/deployment-channels-cost/showcase/scripts/generate-recommendation.mjs
+node research/articles/deployment-channels-cost/showcase/scripts/validate-recommendation.mjs
+node research/articles/deployment-channels-cost/showcase/scripts/verify-showcase.mjs
+node research/articles/deployment-channels-cost/showcase/scripts/privacy-scan.mjs
+```
+
+The deterministic result as of 2026-07-12 is `valid 0`, and it correctly rejects five error classes:
+
+| Exit code | Rejection condition |
+| ---: | --- |
+| 111 | Missing 24/7 availability or persistence assumptions |
+| 112 | Non-loopback/public exposure without auth, or uncontrolled DM/group policy |
+| 113 | Missing token/media/tool variables, inconsistent formulas, or presenting an estimate as a provider invoice |
+| 114 | Leaked secrets/real account identifiers, or claiming channel health from configuration alone |
+| 115 | Missing monthly/per-run cap, rate/concurrency limit, fallback, or kill switch |
+
+The fresh-model layer may read only synthetic fixtures and the contract, and may write at most two recommendation reports; it has no authority to deploy, connect cloud accounts, or read real profiles. The constrained `gpt-5.4` attempt on 2026-07-12 exited before report generation: process exit `1`, neither allowed report was written, and protected files remained unchanged, so this article does not claim model-layer success. The deterministic generator then restored the reference report and reran 0/111-115 and the privacy gate. An independent read-only reviewer finally confirmed that this Showcase's authoritative proof object is the replayable cost formula and security rejection gate; the transparently blocked model layer was not presented as successful and does not weaken these deterministic conclusions.
+
+## Failure modes, boundaries, and when not to deploy this way
+
+### Failure mode 1: treating local success as public readiness
+
+Local loopback avoids public scans, unknown messages, proxy configuration, and multi-user concurrency. When migrating, redo threat modeling; do not keep the same conclusion after copying port mappings.
+
+### Failure mode 2: the container can restart but has no persistent state
+
+A restart policy can only bring a process back up. Without a volume, backups, and recovery drills, auth profiles, channel/provider state, sessions, and workspace can still be lost on rebuild. Test recovery before discussing availability.
+
+### Failure mode 3: declaring health because the channel shows configured
+
+A config-only summary only says that configuration can be found. It may even be a fallback when Gateway is unreachable. Only when live probes, actual message round trips, and logs all pass does it approach business health.
+
+### Failure mode 4: limiting only tokens, not tools and media
+
+One request can trigger multiple model rounds, search, retrieval, media understanding, and voice services. Looking only at the final reply's tokens misses substantial variable costs. Account by complete run, and allocate independent quotas to tools and media.
+
+### Failure mode 5: one shared Gateway serving mutually untrusted tenants
+
+Operator scopes are guardrails inside a trusted control domain, not tenant authorization boundaries. Hostile users, different customers, or different organizations should not share the same Gateway/OS user; separate state, credentials, workspaces, channel accounts, and running instances for each trust domain.
+
+Do not rush to the cloud when tasks strongly depend on local devices without a remote Node/permission design; the need is only a short demo; the team lacks owners for secret management, backups, and alerts; you cannot establish isolation, abuse protection, and a budget for public users; or you do not know who can execute the kill switch during an incident. In these cases, retaining a loopback local experiment is usually safer than creating an unattended public endpoint.
+
+## Exercise: make your own launch receipt
+
+Copy the Showcase's synthetic fixture and replace it with your own **non-sensitive aggregate variables**. Do not write tokens, real account IDs, or message content:
+
+1. Specify availability, persistence, local devices, requests/day, and peak concurrency.
+2. Fill in host and provider pricing inputs from official pages or internal purchase orders on that day, and record the verification date.
+3. Calculate fixed, model input/output, tool, media, channel, egress/observability, and monthly total.
+4. For public/non-loopback ingress, write auth, DM, group, origin, and secret-rotation conditions.
+5. Set a monthly cap, per-run cap, rate/concurrency limit, fallback, and kill switch.
+6. On a test instance, run RPC, channel probes, health, doctor, and log checks; archive only redacted summaries.
+
+Completion criteria: at least one inexpensive candidate is eliminated for failing 24/7 or persistence; the final candidate passes both budget and trust boundaries; every price is labeled “input and verification date”; the receipt distinguishes config-only from live probes; and failures have explicit degrade, stop, and recovery actions.
+
+## Sources and further reading
+
+- [OpenClaw official installation overview](https://docs.openclaw.ai/install): installation, verification, and hosting paths. Verified: 2026-07-12.
+- [OpenClaw official Docker documentation](https://docs.openclaw.ai/install/docker): 2 GB build-memory reminder, volumes, public-host hardening, health, and container operational boundaries. Verified: 2026-07-12.
+- [OpenClaw official Railway](https://docs.openclaw.ai/install/railway), [Render](https://docs.openclaw.ai/install/render), [Fly.io](https://docs.openclaw.ai/install/fly), and [Kubernetes](https://docs.openclaw.ai/install/kubernetes): managed paths, persistence, sleeping, volumes, and the non-production-ready boundary of Kubernetes. Verified: 2026-07-12.
+- [OpenClaw official Gateway runbook](https://docs.openclaw.ai/gateway), [remote access](https://docs.openclaw.ai/gateway/remote), and [security documentation](https://docs.openclaw.ai/gateway/security): long-running control plane, loopback/remote access, authentication, DM/group policy, and multi-tenant boundaries. Verified: 2026-07-12.
+- [OpenClaw official Channels CLI](https://docs.openclaw.ai/cli/channels) and [Gateway CLI](https://docs.openclaw.ai/cli/gateway): the proof scope of `channels status --probe`, config-only fallback, and `gateway status --require-rpc`. Verified: 2026-07-12.
+- [OpenClaw official Secrets management](https://docs.openclaw.ai/gateway/secrets): SecretRef, audit/configure/apply/reload, plaintext remnants, and process-isolation boundaries. Verified: 2026-07-12.
+- [OpenClaw official Token use](https://docs.openclaw.ai/reference/token-use), [API usage and costs](https://docs.openclaw.ai/reference/api-usage-costs), and [Usage tracking](https://docs.openclaw.ai/concepts/usage-tracking): tokens, estimated costs, external API cost surfaces, and provider-invoice boundaries. Verified: 2026-07-12.
+- [OpenClaw v2026.6.11 official release](https://github.com/openclaw/openclaw/releases/tag/v2026.6.11): the latest stable release as of the verification date, published 2026-06-30. Verified: 2026-07-12.
+- [OpenClaw Orange Book](https://github.com/alchaincyf/openclaw-orange-book): a secondary Chinese topic map by Huashu (alchaincyf), published in 2026-04. The README only states educational purposes; the repository has no standard CC/OSI `LICENSE`. This article does not copy or adapt its PDFs, screenshots, charts, images, or paragraphs; product facts were rechecked against the primary official sources above.
+
+The instructional image `/images/articles/deployment-channels-cost/deployment-cost-control-plane.svg` was created by the LearnPrompt Editorial Team based on this article's research pack and Showcase contract, and is licensed CC BY-NC-SA 4.0.

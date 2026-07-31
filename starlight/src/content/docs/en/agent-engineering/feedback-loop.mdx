@@ -1,0 +1,192 @@
+---
+title: "Feedback Layer: Turn Environmental Signals into the Smallest Executable Fix for the Next Round"
+description: "Audit feedback signals for four properties—locatable, decidable, low-latency, and actionable—then use failure evidence to locate one minimal change and state when to stop and when to escalate."
+sidebar:
+  order: 4
+difficulty: intermediate
+updated_from: "2026-05"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-11"
+reading_time: 13 minutes
+research_path: research/articles/feedback-loop
+showcase_path: research/articles/feedback-loop/showcase/feedback-signal
+showcase_status: verified
+quality_score: 94
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Intermediate | 13 minutes | 2026-07-11 | LearnPrompt Editorial Team |
+
+An Agent makes one round of changes without fixing the problem. You add “check more carefully” to the prompt; it makes another round of changes and is still wrong, until the result becomes increasingly messy. Most people next add more adjectives, or paste in only the last line of the error.
+
+But what determines whether the next round can fix the issue is never wording; it is the quality of the feedback signal. Given the same failure, if all you hold is “it failed,” the next step can only be rewriting a whole section or blindly guessing a new direction. If you hold “file X, line 5; expected hello-world, got Hello-World,” the search space narrows to fixes related to lowercasing. The feedback layer determines which kind of signal you hold and turns it into the next-round action.
+
+## What you will be able to do after reading
+
+You will learn to audit any feedback signal using four properties and connect it to a loop that can converge on its own:
+
+1. Locatable: the signal points to a specific file, line number, or configuration rather than vaguely saying “there is a problem.”
+2. Decidable: two people looking at the same signal reach the same pass/fail conclusion.
+3. Low-latency: the less time between an action and receiving its signal, the tighter the loop.
+4. Actionable: the signal can translate directly into the next action without another round of explanation.
+
+You will also see how the feedback layer divides work with the state, memory, evaluation, and orchestration layers, and run a minimal repository to witness how vague feedback says only “the build did not pass,” while actionable feedback narrows the very same failure to a lowercasing-related fix.
+
+![On the left is one feedback loop from action to rerunning acceptance, with stop and escalation branches labeled. On the right, vague and actionable signals show how the same failure leads respectively to a large change and one verifiable lowercasing fix.](/images/articles/feedback-loop/feedback-loop-and-signal-quality.svg)
+*Caption: The left side shows one loop and its stop/escalation exits. The right side explains how signal granularity determines the size of the next change; vague feedback harms both.*
+
+:::note[This is an operating model]
+The “four feedback properties” and “put the fastest acceptance check in the innermost loop” are LearnPrompt's operational synthesis of official advice to provide verifiable signals, for auditing and teaching; they are not any product's official terminology. Product behavior in this article is verified against official primary documentation; see the date at the end.
+:::
+
+## Start with a failure: feedback contains only “it failed”
+
+Suppose your acceptance signal looks like this:
+
+```text
+FAIL: 构建未通过
+```
+
+The sentence is not wrong, but it answers none of the questions that can drive the next step. Which file and which line failed? What was expected, and what was actually received? Of thirty test cases, how many failed—are they the same kind of problem or all different?
+
+With this signal, an Agent, like a person, can only expand the search space: either rewrite the entire function or change implementation direction on intuition. Claude Code's official documentation puts this situation plainly: without runnable checks, “looks done” is the only available signal, so you become the verification loop and must wait to discover every error yourself. What the feedback layer solves is giving the signal enough location information so the next round does not have to guess.
+
+## The four properties of good feedback
+
+Follow the official advice to “provide verifiable signals” to its conclusion, and a useful feedback signal can be broken into four properties that can be checked one by one. This table is the minimal checklist for auditing a signal:
+
+| Property | Question it answers | Counterexample | Positive example |
+| --- | --- | --- | --- |
+| Locatable | Where is the error? | Build did not pass | `test/slugify.test.mjs:5` |
+| Decidable | Did it pass or not? | Looks roughly right | Expected `hello-world`, got `Hello-World` |
+| Low-latency | How soon is it received? | Full-site build: 40 seconds | Targeted unit test: 40 milliseconds |
+| Actionable | What should happen next? | Be more careful | Add `toLowerCase` after trim |
+
+Every entry in the left column cannot be checked mechanically; every cell in the right column can be tied to a real file, command, or decision. The official comparison example makes the same point: when fixing a build failure, providing `the build fails with this error: [paste error]` along with the original error text, and requiring the build to be verified as successful and the root cause to be fixed rather than suppressing the error, is far better than merely saying “the build is broken.” Actionable means the signal itself has already pointed out the next action.
+
+Of the four properties, decidability is the easiest to overlook. Anthropic's engineering article on evaluations gives a firm criterion: for a good task, two domain experts independently judging it should reach the same pass/fail result. If, after seeing the same signal, one person says it passes while another says it fails, it is not feedback at all—only another opinion that needs debating.
+
+## Shorten feedback latency: put the fastest acceptance check in the innermost loop
+
+Feedback latency is not mystical; it is simply the time a command takes. A full-site build takes tens of seconds; a targeted unit test takes tens of milliseconds. The official guidance directly lists “tight feedback loops” among the sources of the best outcomes. Its engineering meaning is simple: use the fastest, most precise signal in the inner loop, and use slower, more comprehensive signals only in the outer loop.
+
+The four tiers of gating in Claude Code documentation are, in essence, arranged from inner to outer by latency and cost:
+
+- Have the model self-check and iterate within one prompt: fastest and immediately available.
+- Set checks as `/goal` conditions, with an independent evaluator rechecking after every round until the condition is satisfied.
+- Use a Stop hook as a deterministic gate: it treats your script as an exit condition and does not let the turn end if it fails.
+- Ask for a second opinion: have a verification subagent use a fresh context to try to falsify the result, so the one doing the work is no longer the one grading it.
+
+In practice, you will not run the outermost loop every time. When changing one line of code, first run the fastest unit test that is closest to that change; once it is green, run the slower full build or independent review. Putting slow signals in the inner loop means penalizing yourself tens of seconds for every line changed, so the loop naturally loosens.
+
+## Locate the minimal change from failure evidence
+
+The value of an actionable signal is that it carries its own location. An assertion provides expected and actual values; a test name and line number narrow the problem to a specific case. Diagnosis therefore becomes a convergent task: map the difference between expected and actual to the relevant code area. A signal can shrink the search space, but usually cannot by itself prove a unique implementation.
+
+The key is resisting the impulse to “change a few more things while you are there.” Anthropic's article on evaluations reminds us that we should usually evaluate the artifact rather than the path—acceptance cares only whether the output is correct, not which implementation route you took. The inverse also holds for the person writing code: since acceptance watches only the output, first choose the smallest candidate fix that explains the evidence rather than opportunistically refactoring. Passing the current acceptance check proves only that this candidate is sufficient for the current cases, not that it is the only answer. The smaller the change surface, the cleaner the causal information the next acceptance run can provide.
+
+## When to stop and when to escalate
+
+The feedback layer's two exits are especially easy to omit: when to stop and when not to continue spinning in place.
+
+Stopping conditions should be written in advance rather than decided by feel. In Anthropic's research on long-running Agents, the generator and reviewer agree on a sprint contract first: before work starts, they define what “done” looks like, and the sprint fails if any hard criterion is not met. Applied to daily work, finish only when all acceptance checks pass; do not continue changing things after the green light—every change after crossing the acceptance line is pure risk.
+
+Escalation conditions must also be explicit. When the signal does not change for two consecutive rounds, or you have hit the time or budget limit, switch people, layers, or strategies instead of looping forever. The official guidance gives two concrete lines: after 8 consecutive blocks, a Stop hook is overridden by Claude Code and the turn ends, which is a deterministic cap; and if you have corrected the same issue more than twice, the right action is to restart with `/clear` and a better prompt, not add rounds in a context polluted by failed attempts. Long-task research works the same way: when a sprint fails, the system hands detailed feedback about what went wrong back to the generator to revise, rather than blindly retrying the same path.
+
+A simple test: if the signal changes every round and the change surface shrinks every round, the loop is converging, so continue. If the signal stays unchanged while the change surface keeps expanding, the loop is diverging, so stop and escalate.
+
+## How the feedback layer divides work with the other four layers
+
+The feedback layer is essential, but it is responsible only for “turning signals into the next action.” It does not store, decide, or schedule. If you do not distinguish the boundaries, you will put problems that belong elsewhere into feedback.
+
+- The state layer answers “what must be remembered for the next round.” Goals and evidence from the last failure belong to state; feedback is the new signal just received from the environment in this round. Feedback flows into state, but it is not itself state.
+- The memory layer answers “what to remember across sessions.” User preferences and project facts are memory; feedback is immediate within the loop and refreshed with every action.
+- The evaluation layer answers “how to decide whether it passed.” Graders and cases produce pass/fail decisions; the feedback layer is broader: after receiving a decision and error, it translates them into the next minimal action. Evaluation supplies the decision; the feedback layer supplies the action.
+- The orchestration layer answers “who runs, in what order, and when to stop.” Feedback is the content read by orchestration's stopping conditions; feedback is the signal, and orchestration is the control flow after reading it.
+
+There is another boundary that is easy to cross: Anthropic explicitly says that separating “the agent doing the work” from “the agent reviewing it” is a strong lever, because self-evaluators often confidently praise their own output even when its quality is obviously mediocre to others. So a generator's report that “I am done” is only a clue. Real feedback must come from tests, diff review, or independent review outside it.
+
+## Showcase: vague feedback vs. actionable feedback
+
+To ensure that “signal granularity determines change size” is more than a slogan, this article includes a minimal repository with no network dependency. It preserves the reproducible sequence fail → diagnose → minimal patch → pass, and places the two feedback channels side by side. See the full directory, commands, and redacted output in [Research and Showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/feedback-loop/showcase/feedback-signal).
+
+The task is a function that turns a title into a URL slug, with acceptance defined by three cases: lowercase, hyphens, and punctuation removal. The saved implementation is missing the lowercasing step.
+
+First, take the vague-feedback route. It runs the same test but translates only the exit code into one conclusion, deliberately discarding all location information. It represents coarse-grained signals such as “the full-site build merely says it failed.” The actual result on macOS with Node v24.11.0 on 2026-07-11:
+
+```text
+$ node checkers/vague-check.mjs
+FAIL: 构建未通过（无更多信息）   (exit 1)
+```
+
+With this signal, you do not know the file, line, expected value, or actual value. Your next step can only be guessing or rewriting an entire section.
+
+Second, take the actionable-feedback route. For the same failure, `node --test` includes the file, line number, expected value, and actual value:
+
+```text
+$ node --test repo/test/slugify.test.mjs
+✖ lowercases and hyphenates words
+✔ collapses repeated whitespace
+✔ drops punctuation
+ℹ pass 2  ℹ fail 1  ℹ duration_ms 39.34
+
+test at repo/test/slugify.test.mjs:5
+  - expected 'hello-world'
+  + actual   'Hello-World'
+```
+
+Only one of three cases fails. The evidence narrows the search space to casing: all lowercase was expected, while the actual value has an uppercase initial. It eliminates the need to rewrite the whole function, but does not prescribe a single implementation.
+
+Third, choose the smallest candidate change consistent with the evidence, and rerun the same acceptance command. This article chooses to add `.toLowerCase()` after `trim()`, changing only one line:
+
+```text
+$ cp patch/slugify.mjs repo/src/slugify.mjs
+$ node --test repo/test/slugify.test.mjs
+✔ lowercases and hyphenates words
+✔ collapses repeated whitespace
+✔ drops punctuation
+ℹ pass 3  ℹ fail 0   (exit 0)
+```
+
+The exit code changing from 1 to 0 is what counts as fixed, not “I think it should be fixed.”
+
+This Showcase proves that feedback's value is not whether it reports an error, but whether the signal carries location information. For the same failure, actionable feedback narrows the search space to a lowercasing issue and lets a one-line candidate patch face the same acceptance check; vague feedback offers only a Boolean conclusion. It does not prove that this patch is the only answer. The two channels run the same tests against the same failure, differing only in signal granularity, so they do not constitute any model ranking; this Showcase also runs no online large model. One pass does not mean a real task will remain reliable over time.
+
+## When the feedback layer should not be used to solve the problem
+
+The feedback layer is not a panacea. In the following situations, do not strain on the signal first:
+
+- The failure comes from a missing tool or insufficient permission. That belongs to the capabilities layer or constraints layer; however clear the signal is, it cannot run a command that does not exist.
+- There is no runnable acceptance check at all. First add a check that can produce pass/fail—a test, build exit code, linter, or script that diffs output against a fixture—or there is no signal to close the loop.
+- Repeated corrections of the same issue remain ineffective. This is the time to escalate, switch layers, or change strategy rather than add more rounds in the same loop; official experience suggests restarting after more than two corrections.
+- You want to hand a hard boundary such as “never delete the production database” to feedback. Use a deny rule, sandbox, or PreToolUse hook to block it before the action happens; feedback arrives only after the action.
+
+One test: if adding a more detailed signal lets the next round move from blind guessing to one minimal change, it is the feedback layer's work. If no amount of additional signal can change the environment, tools, or mandatory boundaries, solve it in another layer.
+
+## Exercise: audit your feedback loop against the four properties
+
+Find a task you recently failed to fix repeatedly, and fill this table with the feedback signal you held at the time:
+
+```yaml
+Locatable:          Does the signal point to a specific file/line, or only say “there is a problem”?
+Decidable:          Would two people seeing the same signal reach the same pass/fail result?
+Low-latency:        Are you running the fastest acceptance check, or waiting for a full build every round?
+Actionable:         Can the signal translate directly into the next action, or does it need another round of explanation?
+Stop/escalate:      Did you stop when everything passed? When the signal stayed unchanged, did you switch strategies or keep forcing the loop?
+```
+
+If any line cannot answer “it lands on a real resource,” that property is a likely reason the task was not fixed. Strengthen only the weakest one—for example, replace a full build with a targeted unit test, or replace “it failed” with an assertion containing file:line—then rerun the same task and observe whether the change surface converges from “large change” to “one spot.” Do not change the model, prompt, and test at the same time, or you will not know which change truly had an effect.
+
+Completion criteria: all five lines can point to a specific file, command, or decision; save the result of the same acceptance command both before and after strengthening the signal; after strengthening, you can use the exit code rather than intuition to decide whether it is fixed. If you still need “I think it looks fixed,” this audit is not complete.
+
+## Sources and further reading
+
+- [Claude Code official documentation: Best practices (verifiable signals and feedback loops)](https://code.claude.com/docs/en/best-practices)
+- [Anthropic: Effective harnesses for long-running agents](https://www.anthropic.com/engineering/harness-design-long-running-apps)
+- [Anthropic: Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)
+- [Harness Engineering Orange Book](https://github.com/alchaincyf/harness-engineering-orange-book)
+- [This article's research package and runnable Showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/feedback-loop)
+
+The first three items are official primary sources supporting all current product behavior in this article, verified on 2026-07-11. The Stop hook behavior of “ending the turn after 8 consecutive blocks” is the current implementation and may change with versions. The Orange Book, a secondary Chinese-language thematic map, helps establish the feedback layer's place in the harness narrative. Its repository is an educational sharing resource requiring attribution; this article retains its link and attribution, but copies none of its images or extended text. The four feedback properties, putting the fastest acceptance check in the innermost loop, and escalating when signals remain unchanged are LearnPrompt's operational synthesis of official advice, not an industry-wide standard; the Showcase in this article has been reorganized and rechecked.

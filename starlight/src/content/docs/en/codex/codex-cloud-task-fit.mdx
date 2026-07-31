@@ -1,0 +1,411 @@
+---
+title: "What Tasks Fit Codex Cloud: Use timezone-rollup to Rehearse Whether It Is Safe to Move to the Cloud"
+description: "Use a concrete timezone-rollup bug to learn how to decide before submitting whether a task belongs in Codex Cloud, using four gates: repo-contained, deterministic, clean-checkout, and acceptance-command."
+sidebar:
+  order: 4
+difficulty: intermediate
+source_repo: alchaincyf/codex-orange-book
+source_url: https://github.com/alchaincyf/codex-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-11"
+reading_time: "22 min"
+research_path: research/articles/codex-cloud-task-fit
+showcase_path: research/articles/codex-cloud-task-fit/showcase
+showcase_status: verified
+quality_score: 100
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Intermediate | 22 min | 2026-07-11 | LearnPrompt Editorial Team |
+
+You have a specific bug: a daily usage rollup assigns usage at 23:55 to the next day. The fix itself is straightforward: replace UTC calendar-day buckets with calendar-day buckets in the reporter's local time zone. The harder question is different: **should this kind of task stay local for interactive work, or is it ready to hand directly to Codex Cloud?**
+
+Most people begin by asking whether the task is difficult. That is the wrong direction. Whether Cloud is a fit is not mainly about whether the model can write the fix; it is about whether the task can already be fully described, independently executed, and mechanically accepted in an isolated container. In other words, first decide **whether the task fits Cloud's operating assumptions**, rather than asking whether a cloud agent can cleverly solve it for you.
+
+This article rehearses the decision with a minimal but real `timezone-rollup` bug. We will not create a real Cloud task or invent a task ID that does not exist. Instead, we freeze the **task contract, environment contract, cloud-fit gate, good patch, negative-scenario exit codes, and clean-room replay** in the repository. The final answer is not “Cloud has already fixed this bug for you,” but the more useful teaching question: **is this handoff ready yet?**
+
+:::note[Start with the boundary]
+The Showcase in this article is a local handoff rehearsal, not a real Codex Cloud run. It demonstrates that this task meets Cloud's boundary requirements and that the patch can be replayed successfully in a clean temporary HOME with no agent network, no secrets, and no local-file dependencies. Submitting a real Cloud task, reviewing its diff, opening a PR, and following up still happen in the product.
+:::
+
+## What you will be able to do after reading
+
+After reading, you should be able to do four things independently:
+
+1. Explain the real Codex Cloud task lifecycle: container checkout, setup / maintenance, agent phase, diff / PR / follow-up, plus where caching and network boundaries occur.
+2. Stop relying on the intuition that “this looks like a small fix, so it belongs in the cloud.” Instead, use this article's conservative offline-first lane for preflight: `repo-contained`, `deterministic`, `clean-checkout`, and `acceptance-command`.
+3. Re-run `cloud-handoff-lab`: pass the gate locally first, then apply the only patch in a clean-room environment and run the tests, while also seeing four stable rejection exit codes.
+4. Handle the boundaries around environment variables, secrets, browser login state, local files, and `AGENTS.md` correctly, without treating implicit local state as something Cloud naturally has.
+
+## First, clarify how Codex Cloud actually runs
+
+As of 2026-07-11, the official Cloud environment documentation describes the Cloud task flow very clearly. It can be compressed into five steps:
+
+1. Codex creates a container and checks out your selected branch or commit.
+2. Codex runs the setup script; if it restores a cached container, it also runs the maintenance script.
+3. Codex applies the network policy: setup can access the network to install dependencies, while the agent phase has no network by default.
+4. The agent enters its loop: read the repository, modify files, run checks, and attempt to verify the result.
+5. When finished, it shows an answer and a diff; you can continue with follow-ups or decide whether to open a PR.
+
+This sequence matters because it immediately rules out three common misunderstandings.
+
+First, Cloud is not “a complete copy of your current terminal.” It gets only **the repository checkout plus the environment you configure**. It does not get your open local browser, desktop apps, Keychain, Downloads folder, or shell history.
+
+Second, the setup script and the agent phase are not one continuous shell. The official documentation explicitly notes that the setup script runs in a separate Bash session, so temporary environment variables such as `export FOO=bar` do not automatically carry into the agent phase. If the agent also needs a variable, put it in the environment settings or write it to `~/.bashrc`. This is why “I exported it temporarily during setup, so the Cloud Agent can see it too” is a mistaken assumption.
+
+Third, what Cloud gives you at the end is not merely “I fixed it,” but **an answer, a diff, and a path for continued collaboration**. The real output surface is the diff, follow-up, and optional PR, not a vague natural-language promise. For that reason, whether a task belongs in the cloud ultimately depends on whether it can be reviewed at those artifact layers, not on whether you are willing to trust the agent first.
+
+The command surface of local `codex-cli 0.142.2` adds another piece of evidence. `codex cloud --help` explicitly lists `exec`, `status`, `list`, `apply`, and `diff`; `codex cloud exec --help` also requires an explicit `--env <ENV_ID>` and supports `--attempts` and `--branch`. This shows that Cloud has a distinct entry point, but also reiterates an important point: **having commands does not mean the current workspace has a usable environment, and it certainly does not mean a task is inherently suited to Cloud.**
+
+## Decide whether it fits an unattended handoff first, not by “task size”
+
+If you want to hand off a task so it can progress unattended in an isolated environment and return a diff for review, I recommend asking four questions first. These are not the limits of Codex Cloud's capabilities. They are the conservative lane this article defines for **offline-first, predictable handoffs**. Exploratory Cloud tasks and tasks that need limited network access still exist, but they require more follow-up, environment configuration, and human judgment.
+
+| Gate | The question you really need to ask | What passing means | What failure usually means |
+| --- | --- | --- | --- |
+| `repo-contained` | Are all inputs required for success in the repo, the environment contract, or explicitly declared external interfaces? | The agent does not need implicit local state | It depends on Keychain, browser login state, Finder files, or local apps |
+| `deterministic` | Have the goal, allowed paths, and expected fix been frozen? | The agent is executing, not discovering the direction as it goes | “First, see what is wrong” |
+| `clean-checkout` | Can it start again from a fresh checkout and a clean HOME? | Correctness does not depend on warm caches or personal historical state | It passes only in a dirty local directory, with old dependencies, or with old caches |
+| `acceptance-command` | Is there a clear command and stable exit code for acceptance? | The diff and result can be mechanically reviewed | You can only decide “it looks fixed” by eye |
+
+Of these four, `acceptance-command` is the easiest to think of, and the other three are the easiest to overlook. Those three determine whether you use Cloud as an engineering system or as “a remote chat box where you try your luck.”
+
+### Why `repo-contained` comes first
+
+As soon as a task depends on a resource unique to your local machine, it has already departed from Cloud's operating assumptions. Typical examples include:
+
+- It must read `~/Library/Keychains/login.keychain-db`.
+- It must reuse the admin console already logged into in your current browser.
+- It must access a private CSV in Downloads that is not checked into the repository.
+- It must depend on the current state of a local desktop app.
+
+An agent may still be able to work on these tasks, but the more appropriate route is often a local CLI, IDE, or desktop app rather than Cloud. Cloud's value lies in isolation, asynchronous work, and reviewability—not secretly reusing the private state of your personal machine.
+
+### Why `deterministic` cannot be replaced by “there are tests”
+
+Many tasks have tests but still have an unclear direction. For example:
+
+- Good task: change UTC bucketing to reporter day, modify only `src/rollupByReporterDay.js`, then run `npm test -- --test-reporter tap`.
+- Bad task: first investigate what is strange about the daily rollup, then fix whatever seems wrong.
+
+Both may have tests, but the latter is not yet the unattended handoff where you hand it off and wait for a result. This is not to say that Cloud cannot do discovery: the agent can explore the repository, run commands, and converge through follow-ups. The difference is that exploratory tasks require you to expect iteration and directional judgment. If you want one predictable asynchronous execution, the official Prompting documentation recommends stating the target behavior, relevant code or reproduction steps, important constraints, and verification method. In the engineering terms of this article: **freeze the contract first, then enter the conservative execution lane.**
+
+### Why `clean-checkout` catches many false passes
+
+The official documentation allows a container cache to be retained for up to 12 hours. When a cache is restored, it also checks out the current task branch and can optionally run a maintenance script. Caching is a useful speed optimization, but it should not be the basis for deciding whether a task fits Cloud.
+
+The more reliable question is: **can this task still work from a completely cold start?**
+
+If the answer is no, the cache is merely hiding the problem temporarily. For example:
+
+- Tests pass only because an old dependency already sits in the cache.
+- A script works only because some configuration remains in your local HOME.
+- The agent sees something you assume “was always in the repo” only after restoring a warm branch state.
+
+At that point, what you need is not to hope that the Cloud cache always hits, but to make the task valid under a clean checkout as well.
+
+### Why `acceptance-command` must be a command, not a feeling
+
+An acceptance command must satisfy at least three conditions:
+
+1. It runs from the repository root.
+2. It has a stable exit code.
+3. It covers the target behavior rather than incidentally running an unrelated full pipeline.
+
+For the `timezone-rollup` fixture in this article, `npm test -- --test-reporter tap` is a good enough acceptance command. Its value is not that “it looks formal,” but that it:
+
+- Normalizes output into stable `tests / pass / fail` values.
+- Directly covers the time-zone bucketing behavior we care about.
+- Depends on no extra packages, secrets, network access, or local files.
+
+## Understand the Cloud handoff decision chain in one diagram
+
+![A decision chain that uses four gates to determine whether the timezone-rollup bug fits Codex Cloud, then enters clean-room replay after passing](/images/articles/codex-cloud-task-fit/cloud-task-fit-decision-chain.svg)
+*Caption: This diagram breaks down the article's offline-first unattended lane, not every Cloud capability. Only when a task has no implicit local-state dependency, its direction is frozen, it supports a clean checkout, and it has an acceptance command does it enter local clean-room replay. Tasks requiring exploration or agent network access should move into a separately configured, follow-up-capable lane rather than being mistaken for something Cloud can never do.*
+
+There are two easy-to-miss points in this diagram.
+
+First, the positive path is not “go directly to the cloud,” but “pass the gate first, then prove that clean-room replay works.” That is the boundary emphasized at the beginning of this article: we are verifying handoff readiness, not fabricating a record of a real Cloud execution.
+
+Second, the negative path does not vaguely say “not a great fit”; it returns stable exit codes. What benefits readers most is not an abstract conclusion, but a certain, reproducible rejection result they can see from the repository root.
+
+## Showcase: rehearse a concrete timezone-rollup bug with cloud-handoff-lab
+
+The Showcase in this article is fixed as `cloud-handoff-lab`. It is a minimal Node repository with only four files:
+
+```text
+AGENTS.md
+package.json
+src/rollupByReporterDay.js
+test/rollupByReporterDay.test.js
+```
+
+Its `src/rollupByReporterDay.js` intentionally retains a bug: the function currently buckets with `Date.toISOString().slice(0, 10)`, so an event such as `2026-02-04T07:55:00Z`, which falls late at night on the previous day in Los Angeles, is incorrectly assigned to `2026-02-04` instead of `2026-02-03` from the reporter's perspective.
+
+### Freeze the task contract first, so the agent does not guess while fixing
+
+The positive task card is at `research/articles/codex-cloud-task-fit/showcase/cloud-handoff-lab/contracts/positive-timezone-rollup.json`. It contains only a few key pieces of information, but each one reduces execution freedom:
+
+```json
+{
+  "goal": "Fix the timezone rollup bug so usage is grouped by the reporter local day instead of the UTC day.",
+  "direction_status": "frozen",
+  "expected_fix": "Replace UTC date bucketing with a reporter-time-zone day key in src/rollupByReporterDay.js.",
+  "allowed_paths": ["src/rollupByReporterDay.js"],
+  "acceptance_command": "npm test -- --test-reporter tap"
+}
+```
+
+These lines have substantial teaching value. They show that a task suited to Cloud is usually not as vague as “please fix this problem,” but is already explicit about:
+
+- Which behavior to change.
+- Which paths may be changed.
+- What the acceptance command is.
+- Whether the task direction still needs discovery.
+
+If you cannot yet write these fields, what you usually need now is not to submit a Cloud task but to converge on the task locally or during a `/plan` phase.
+
+### Then freeze the environment contract to make Cloud assumptions explicit
+
+The `environment-contract.json` in the same directory does something different: it pins the Cloud assumptions this article follows. It is not a real product environment configuration file, but a teaching-oriented projection of the official mechanisms:
+
+```json
+{
+  "checkout_mode": "selected-branch-or-commit",
+  "setup_phase": { "internet_access": "on" },
+  "maintenance_phase": { "command": "none" },
+  "agent_phase": {
+    "internet_access": "off",
+    "env_vars": { "TZ": "UTC" },
+    "env_var_lifecycle": "full-task",
+    "secrets_available": false,
+    "secret_lifecycle": "setup-only",
+    "home": "clean-temp-home",
+    "local_files": "repo-only",
+    "browser_login": false
+  }
+}
+```
+
+This contract separates three things that are easy to conflate:
+
+- **Setup can access the network**, because the official documentation permits setup to install dependencies.
+- **The positive example in this article keeps the agent phase offline**, so the fix logic cannot quietly rely on online research or temporary calls to external APIs. This is a conservative experiment setting, not the upper bound of Cloud's capabilities.
+- **Environment variables and secrets have different lifecycles**. This article calls that out because many people assume, “Cloud has a secret, so the agent can use it directly while running tests.” That is not how the official documentation defines it.
+
+### What `AGENTS.md` does here—and does not do
+
+This fixture includes a local `AGENTS.md` that does only four things:
+
+1. Names `src/rollupByReporterDay.js` as the target file for the current task.
+2. Restricts the allowed edit path.
+3. Specifies `npm test -- --test-reporter tap` as the acceptance command.
+4. Restates that browser state, Keychain, and resources outside the repository are not allowed dependencies.
+
+This corresponds directly to the official documentation: if an `AGENTS.md` exists in the repository, the agent uses it to find project-specific lint and test commands. Notice that it only helps the agent execute **within known boundaries**. It does not create a clear goal for you, and it does not magically make local dependencies available to Cloud.
+
+### How the positive scenario proves it “fits the cloud”
+
+The positive scenario does not call `codex cloud exec` directly. Instead, it runs:
+
+```bash
+node research/articles/codex-cloud-task-fit/showcase/cloud-handoff-lab/scripts/verify-showcase.mjs
+```
+
+This command does four things in order:
+
+1. Audits the task contract and environment contract with `cloud-fit-gate.mjs`.
+2. Creates a one-time `HOME` and a one-time Git repository in the system temporary directory.
+3. Initializes a clean checkout from `fixture/` and applies the only `good.patch`.
+4. Runs `npm test -- --test-reporter tap` with no local secret, no browser login state, and no agent network.
+
+The frozen positive summary is:
+
+```text
+positive-clean-room: gate=0 apply=0 test=0 changed=src/rollupByReporterDay.js
+```
+
+The most important part is not `test=0`, but the other two signals:
+
+- `gate=0`: the task meets the handoff boundary before it is submitted to Cloud.
+- `changed=src/rollupByReporterDay.js`: the patch scope matches the frozen contract.
+
+The test output also does not retain raw temporary paths; it freezes only a comparable summary:
+
+```text
+tests=3
+pass=3
+fail=0
+```
+
+This is what a qualified handoff rehearsal should look like: **the raw run happens in a temporary directory outside the repository, while the repository contains only minimal, reviewable, repeatable artifacts.**
+
+### What this fix actually changes
+
+`good.patch` is not fancy. It does only one thing: replace the UTC day key with a reporter day key based on `Intl.DateTimeFormat(..., { timeZone })`. The frozen core diff is:
+
+```diff
+-function utcDayKey(instant) {
+-  return instant.toISOString().slice(0, 10);
++function reporterDayKey(instant, timeZone) {
++  const formatter = new Intl.DateTimeFormat("en-CA", {
++    timeZone,
++    year: "numeric",
++    month: "2-digit",
++    day: "2-digit",
++  });
++  const parts = formatter.formatToParts(instant);
++  const year = parts.find(({ type }) => type === "year")?.value;
++  const month = parts.find(({ type }) => type === "month")?.value;
++  const day = parts.find(({ type }) => type === "day")?.value;
++  return `${year}-${month}-${day}`;
+ }
+```
+
+The patch itself is not the important part. What matters is that it satisfies the four things this article aims to prove:
+
+- All inputs are in the repository.
+- The target behavior is frozen.
+- Clean replay passes.
+- The acceptance command is clear.
+
+That is also why this article chooses a time-zone rollup bug instead of an arbitrary string-replacement example. A time-zone bug simultaneously has clear logic, testable behavior, and ample opportunity for extra variables from local state to leak in, making it an especially good rehearsal sample for Cloud task fit.
+
+## Negative scenarios: why some tasks should be rejected by the gate before submission
+
+Showing only the positive example would create a bad outcome: readers could easily believe that “as long as tests can be written, almost any task can go to the cloud.” So `cloud-handoff-lab` also archives four kinds of negative task cards and gives them stable exit codes.
+
+### `21`: depends on `~/Library/Keychains`
+
+The first negative example asks you to fix the time-zone bug and then read a value from `~/Library/Keychains/login.keychain-db` to verify the result. The issue is not that this operation is dangerous; it is that it simply does not belong to Cloud's repo-contained assumption.
+
+A real Cloud container does not have your macOS Keychain. Putting this dependency in the task card only makes the Cloud run fail unexpectedly during execution. The more mature approach is to **reject it before submission**.
+
+### `22`: depends on browser login state
+
+The second negative example asks you to fix the bug and then manually compare it with an already logged-in analytics dashboard. This may sound reasonable at first, but it is likewise not a stable input for Cloud. A Cloud task should not assume it inherits the personal browser state you already opened, logged into, and navigated to the right page.
+
+If browser verification is genuinely required, better approaches include:
+
+- Freeze screenshots or exported JSON in the repository.
+- Use a publicly accessible preview page as input.
+- Explicitly return to local verification instead of putting a browser-session dependency into Cloud.
+
+### `23`: missing acceptance command
+
+The third negative example closely resembles the state of many real teams: the goal looks clear, but acceptance is only “fix it until it looks right.” Such a task does not necessarily have to be abandoned, but it should not at least be directly packaged as a reviewable Cloud handoff.
+
+The reason is simple: Cloud ultimately gives you a diff. Without an acceptance command, you have no stable way to determine whether the diff has achieved the goal; you can only rely on subjective impressions.
+
+### `24`: unclear task direction
+
+The final negative example deliberately keeps wording such as “first see what is wrong, then fix anything you think is problematic.” It is not necessarily more complex than the positive example, but it is clearly still in the discovery phase, so it is rejected by **this article's unattended-execution gate**. These tasks can still enter a follow-up-capable Cloud exploration task or first converge locally; do not generalize this exit code into “Cloud does not support exploration.”
+
+This kind of task is better suited to converging first in a local interactive session, or to asking Codex for a `/plan` proposal first. Once you can write the problem as a frozen contract, both execution cost and result reviewability improve substantially.
+
+The frozen negative result summary is:
+
+```text
+negative-keychain-dependency: gate=21
+negative-browser-login: gate=22
+negative-missing-acceptance: gate=23
+negative-unclear-direction: gate=24
+```
+
+These exit codes are not official reserved codes; they are the teaching gate design of this tutorial. But they are useful because they turn the reason “this task does not fit the cloud” from an abstract judgment into a reproducible result.
+
+## Environment variables, secrets, setup, maintenance, cache: the boundaries most often confused
+
+Many misuses of Cloud come from mixing together issues at different layers. Here are the five boundaries most often confused.
+
+### 1. An environment variable and a secret are not synonyms
+
+In the official Cloud environment documentation, environment variables and secrets have different lifecycles:
+
+- Environment variables: visible throughout setup script and agent phase.
+- Secrets: decrypted and available only in setup scripts; removed before the agent phase begins.
+
+That means if your acceptance command itself needs a value, it is more likely to be an environment variable than a secret that exists only during setup. Conversely, if a secret is only needed for setup to install private dependencies, there is no need to expose it to the agent phase.
+
+### 2. A setup script having network access does not mean the agent has network access by default
+
+The official Agent internet access documentation explicitly states that the agent phase has no network by default. Setup scripts can still access the network to install dependencies, but that should not be understood as “the fix can look up anything it wants during execution.” Therefore, this article's conservative preflight starts by assuming **the agent phase has no network**.
+
+This does not mean “a task requiring network access is not suited to Cloud.” The official environment supports enabling agent internet per environment and narrowing access with a domain allowlist and HTTP methods. Tasks that truly need to query a trusted API or repository resource can still fit Cloud. The cost is that you must separately audit prompt injection, code or secret exfiltration, malicious dependencies, and licensing risk, and open only necessary domains and preferably only `GET` / `HEAD` / `OPTIONS`. This article's `requires_agent_internet: false` simply chooses the easiest-to-reproduce, lowest-risk teaching lane.
+
+### 3. A maintenance script is compensation after cache restoration, not an excuse for cold-start omissions
+
+When a cached container is restored, the official documentation allows a maintenance script to run. Its reasonable uses include: setup ran on an old commit and dependencies now need updating; or environment variables and scripts did not change but branch code advanced and needs lightweight maintenance.
+
+Its unreasonable use is silently filling in a critical cold-start step that setup should have performed but did not. Otherwise, task correctness rests on the hidden premise that “a cache must have been hit once already.”
+
+### 4. Cache can speed things up, but it cannot replace clean replay
+
+The official documentation says a cache is retained for at most 12 hours and automatically invalidated when setup, maintenance, environment variables, or secrets change. For tutorial writers, more important than memorizing those parameters is understanding one sentence: **cache can explain why the second run is faster; it cannot explain why the first run should be correct too.**
+
+That is why this article's control plane insists on clean-room replay first. When a cold start passes, cache is only an optimization; when a cold start fails, cache only hides a defect temporarily.
+
+### 5. `AGENTS.md` helps you find commands, but it does not fill in the contract
+
+When a task is vague, many people place their hopes in `AGENTS.md`: “the repository has test commands written down, so the Cloud Agent will understand.” That is still overly optimistic. `AGENTS.md` is very useful for telling the agent what to run, what not to touch, and the project's command conventions. But it cannot replace the three most important things in a task card:
+
+- Which behavior must change.
+- Which paths may be changed.
+- What result counts as complete.
+
+## When not to enter the unattended lane yet, even if the task looks small
+
+In the following situations, I recommend converging locally first, or explicitly treating the Cloud task as exploratory work that needs follow-up, rather than expecting one unattended run to deliver a final diff:
+
+- You still cannot state the allowed paths clearly.
+- You have no acceptance command and can only accept based on human impressions.
+- The task needs local login state, a local app, a browser session, or private files.
+- You already know the goal must change as you investigate, rather than being executed as a frozen contract.
+- What you actually want is a discussion of approaches, not a reviewable diff.
+
+A practical rule is: if you cannot write the task contract in ten lines or fewer, do not put it into this article's conservative lane yet. Not because Cloud is not capable enough, but because the task still needs exploration, environment configuration, or human judgment.
+
+## A copyable Cloud handoff card
+
+Copy the following card for your next candidate task. If you cannot write three or more items, do not rush to move it to the cloud.
+
+```yaml
+goal: 要修什么行为
+allowed_paths:
+acceptance_command:
+direction_status: frozen / ambiguous
+requires_clean_checkout: true / false
+host_dependencies:
+  local_files:
+  browser_login: false
+  local_apps:
+requires_agent_internet: false
+requires_secret_names:
+follow_up_plan: diff only / ask follow-up / open PR after review
+```
+
+What makes this template genuinely useful is not that it looks like a specification; it forces you to expose implicit assumptions you had been taking for granted. For example, once you write out `host_dependencies.local_files`, it becomes difficult to keep telling yourself that “reading the Keychain once is no big deal.” Once you find that you cannot write `acceptance_command`, you realize that what is missing is not Cloud capability but acceptance design.
+
+## Exercise: run a real task through fit preflight
+
+Choose a task that you might actually give to an agent this week. Keep it to no more than one target file or a small module. Then follow these three steps:
+
+1. Write a task contract containing only the goal, allowed paths, acceptance command, and host dependencies.
+2. Ask yourself the four questions from this article one by one: are `repo-contained`, `deterministic`, `clean-checkout`, and `acceptance-command` all satisfied?
+3. If you cannot answer any one of them, pull the task back to local convergence first, then decide whether to use Cloud.
+
+Write the acceptance criteria clearly too: if you still need to decide completion by “I looked at the diff and it seems about right,” this exercise has not passed yet. The true sign of passing is: **before submitting, you can explain why this task fits the cloud—or why it should be rejected by the gate.**
+
+## Sources and further reading
+
+- Official documentation: [Cloud environments](https://learn.chatgpt.com/docs/environments/cloud-environment)
+- Official documentation: [Agent internet access](https://learn.chatgpt.com/docs/cloud/internet-access)
+- Official documentation: [Prompting](https://learn.chatgpt.com/docs/prompting)
+- The official documentation supports the Cloud mechanism's task lifecycle, network boundaries, environment-variable and secret lifecycles, and prompting methods; relevant facts in this article were verified as of 2026-07-11.
+- Local command-surface evidence: `research/articles/codex-cloud-task-fit/showcase/cloud-handoff-lab/results/local-cloud-help.txt`, containing excerpts from `codex cloud --help` / `codex cloud exec --help` for `codex-cli 0.142.2`.
+- Chinese secondary-source topic map: [Codex Orange Book](https://github.com/alchaincyf/codex-orange-book)
+
+Official documentation supports claims about current product behavior. Codex Orange Book is retained only as a Chinese secondary-source topic map with attribution and licensing notice: its README identifies [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). This article's structure, argument, Showcase, and teaching image were reorganized and rechecked against primary sources and the local rehearsal as of 2026-07-11.

@@ -1,0 +1,197 @@
+---
+title: "Orchestration Layer: Turn One Task into an Explicit State Machine"
+description: Audit orchestration with seven decisions—order, roles, routing, retries, budget, stopping, and escalation—starting with a minimal state machine of one worker plus an independent evaluator, and explain when not to use multiple Agents.
+sidebar:
+  order: 6
+difficulty: advanced
+updated_from: "2026-05"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-11"
+reading_time: 14 minutes
+research_path: research/articles/orchestration-layer
+showcase_path: research/articles/orchestration-layer/showcase/state-machine
+showcase_status: verified
+quality_score: 95
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Advanced | 14 minutes | 2026-07-11 | LearnPrompt Editorial Team |
+
+When a task gets complicated, many people's first instinct is to split it among several Agents running in parallel: one researches, one writes code, and one tests, as if more Agents automatically meant a more advanced system. Yet when they finish, what you often have is more mutually contradictory text, not a more reliable result.
+
+The problem is never the number of Agents; it is undefined control flow: who does what in which order, who decides right and wrong, where the decision should route the result next, how many times failure may retry, what the budget is, when work counts as complete, and when it should stop and hand off to a human. The orchestration layer is the layer that answers this chain of questions. Once you think it through, you find that most tasks need only one worker, one independent evaluator, and one hard-coded state machine to start; multiple Agents are merely one possible role topology, not a synonym for something more advanced.
+
+## What you will be able to do after reading
+
+You will learn to see the orchestration layer as an explicit state machine and audit any Agent workflow using seven decisions:
+
+1. Order: what happens first and next, and which steps can be trimmed.
+2. Roles: who executes and who evaluates, and whether the two are deliberately separated.
+3. Routing: after a pass/fail acceptance decision, which step receives control next.
+4. Retry: which step failure returns to, and what feedback accompanies the retry.
+5. Budget: the hard cap on retries and turns.
+6. Stop: which signal counts as done, and who agreed on it in advance.
+7. Escalate: which condition means stop and change people instead of spinning in place.
+
+You will also run a minimal state machine with no network dependencies and directly observe one task go through `INSPECT → IMPLEMENT → VERIFY → RETRY → STOP/ESCALATE`: one failure is routed back, it passes after correction, and it escalates to a human once the retry budget is exhausted.
+
+![On the left, one task is drawn as a state machine from INSPECT to IMPLEMENT to VERIFY, with ROUTE reading a decision and branching to stop on pass, retry on failure while budget remains, or escalate on failure with no budget left; on the right, the division of work among a worker that executes, an independent evaluator that judges, and an orchestrator that controls flow is compared](/images/articles/orchestration-layer/orchestration-state-machine-and-roles.svg)
+*Caption: The left side is the state machine and its two exits—stop and escalate. The right side explains why the role that does the work and the role that scores it must be separate; the orchestration layer reads the decision and chooses the next step, neither writing code nor approving its own work.*
+
+:::note[This is an operating model]
+“The seven orchestration decisions” and “start simple, then add complexity” are LearnPrompt's operational synthesis of several official engineering recommendations, designed to make auditing and teaching easier; they are not official terminology from any one product. For product behavior, this article returns to primary official documentation for verification; dates appear at the end.
+:::
+
+## First, a failure: split the work across more Agents and get more text
+
+Suppose the task is “refactor this module more cleanly and add tests,” and you immediately start three Agents in parallel: one reads the code and proposes a plan, one changes the code, and one writes tests. The division of labor sounds clear, but it answers none of the decisions that govern control flow.
+
+Which of the three Agents goes first? Does the coding Agent wait for the planning Agent's conclusion? Which version of the code should the testing Agent write against? After the change, who decides whether “cleaner” meets the bar—does the coding Agent get to decide for itself? If tests fail, do you send it back to the coding Agent or begin another planning round? After how many retries should you stop and call a human?
+
+None of these questions has been answered, so the three Agents each write their own thing. In the end, you receive three artifacts that do not fit together, and still have to act as the integrator yourself. Adding another Agent cannot fill these engineering gaps—the missing piece is not compute, but control flow. Anthropic's engineering research on long-running Agents puts this cautiously: every added orchestration component assumes the model cannot do something on its own, and that assumption deserves repeated scrutiny. In other words, multiple Agents are not the starting point; they are added carefully only when a single-worker state machine is genuinely insufficient.
+
+## The seven decisions the orchestration layer must fix
+
+When you separate the control flow of a task, the orchestration layer really has to answer seven decisions that can each be checked individually. The table below is the minimum checklist for auditing an orchestration workflow:
+
+| Decision | Question it answers | Anti-pattern | Primary-source cue |
+| --- | --- | --- | --- |
+| Order | What happens first and next | Start writing and solve the wrong problem | Explore → plan → implement → commit; trim when appropriate |
+| Role | Who executes and who scores | The doer approves its own work | Separating execution and scoring is a strong lever |
+| Routing | Which step receives the decision | An ambiguous decision leads to circular debate | An independent evaluator rechecks every round |
+| Retry | Which step failure returns to | Blindly rerun the same path | Return detailed failure feedback to the generator |
+| Budget | How many times at most | Infinite loops | A Stop hook ends the turn after 8 consecutive blocks |
+| Stop | What counts as done | Keep changing things after green | Agree on done before beginning work |
+| Escalate | When to change people | Stay in a dead loop without calling anyone | Restart after two ineffective corrections |
+
+Each item in the left column can map to a segment of state-machine control flow, and each cell in the right column is supported by a primary official source. Next, we will unpack the four groups that are easiest to overlook.
+
+## Why the one who does the work and the one who scores it must be separate
+
+The first strong lever in orchestration is the division of roles. Anthropic puts it plainly: separating the agent that does the work from the agent that scores it is the most powerful way to address self-evaluation bias. The reason is easy to understand—the generator will confidently praise its own artifact even when its quality is plainly mediocre to others.
+
+Interestingly, it adds a finer distinction: an independent evaluator is also an LLM and can be biased, but tuning an independent evaluator to be demanding is far more feasible than asking a generator to criticize its own work. That is why orchestration should enforce separation structurally instead of hoping that “please check yourself rigorously” will suffice.
+
+In Claude Code, this appears as the Writer/Reviewer pattern: one session writes, while another reviews with fresh context. The official rationale is that fresh context improves code review because it is not biased toward code just written. A stronger level is an adversarial review subagent: it sees only the diff and the acceptance criteria you provide, not the reasoning that produced the diff, so it judges independently from its own position. The core action of the orchestration layer is ensuring that the role that wrote the code does not complete the VERIFY step itself.
+
+## Order and routing: how the state machine reads a decision to choose the next step
+
+The second group of decisions is order and routing. Order is not a ritual. The official recommended four-stage workflow is explore, plan, implement, commit: first read files and answer questions in read-only mode, then write an implementation plan, leave read-only mode to implement against the plan, and finally commit. At the same time, it notes that if a change can be described in one sentence, skip planning and do it directly. Order is therefore control flow that can be trimmed and scaled to task complexity, not a full ceremony every time.
+
+Routing is the part of orchestration most like a state machine: VERIFY produces a pass/fail decision, and orchestration reads that decision to choose which step receives control. There is a prerequisite here—the decision must be unambiguous. Anthropic's engineering article on evaluations provides a strict criterion: a good task is one for which two domain experts, judging independently, would reach the same pass/fail result. If even whether it passes is debatable, routing itself stalls in place.
+
+Official guidance ranks the strength of stopping in four levels; in essence, it is routing from weak to strong:
+
+- In one prompt, ask the model to run checks and iterate by itself. This is the weakest option, but readily available.
+- Set `/goal` conditions, with an independent evaluator rechecking after every round until the conditions hold.
+- Use a Stop hook as a deterministic gate: it treats your script as an exit condition, and does not allow the turn to end if it fails.
+- Ask for a second opinion: have a verification subagent with a fresh model attempt to overturn the result, so the one doing the work is no longer the one assigning the score.
+
+There is another easily overlooked principle: routing reads whether the artifact is correct, not whether the path was correct. Official guidance says that you should usually evaluate the artifact rather than the path—acceptance recognizes only output and does not prescribe which implementation route the worker must take. This keeps the orchestration decision clean: passing VERIFY proves only that the current artifact meets acceptance, not that it is the only implementation.
+
+## Retry, budget, stop, and escalate: the two exits from a loop
+
+The third group of decisions is the loop's two exits. They are the most likely to be written as a polished sentence in a document yet never implemented in real control flow.
+
+Retry and budget need to be written separately. Retry answers which step to return to after failure; budget answers how many times at most. A retry with feedback is, as in Anthropic's long-running-Agent research, when a sprint fails and the system gives detailed feedback on “what went wrong” back to the generator to fix, rather than blindly rerunning the same path. Budget, meanwhile, is a hard upper limit: after 8 consecutive blocks, Claude Code's Stop hook is overridden and ends the turn. That is a deterministic cap on attempts—it exists to prevent the loop from turning forever. This “8 times” is the current implementation and may change with versions.
+
+Stopping conditions should be agreed in advance, not decided by feel. In Anthropic's long-running-Agent research, the generator and reviewer agree on a sprint contract before beginning each sprint: they define “what done looks like and how success will be verified” before writing the first line of code; if any hard metric is missed, the sprint fails. In daily work, that means finish only when all acceptance checks pass; do not keep changing things after green—every change beyond the acceptance line is pure risk.
+
+Escalation conditions must likewise be explicit. When signals stop changing consecutively, or when the budget has already been hit, it is time to change people, layers, or strategy, not spin in place. Official guidance gives a concrete rule of thumb: if you have corrected the same problem more than twice, the right action is to restart with `/clear` and a better prompt, rather than adding rounds in a context polluted by failed attempts. A simple test is this: if every round's decision changes and the change surface shrinks, the loop is converging, so continue; if the decision stays unchanged while the change surface grows broader, the loop is diverging, so stop and escalate.
+
+## Showcase: a minimal orchestration state machine
+
+To keep “orchestration is a state machine” from remaining a slogan, this article includes a minimal state machine with no network or third-party dependencies. It preserves the reproducible full process in which the same task goes through `INSPECT → IMPLEMENT → VERIFY → RETRY → STOP/ESCALATE`. See the full directory, commands, and redacted output in [Research and Showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/orchestration-layer/showcase/state-machine).
+
+The three roles are strictly divided: `worker.mjs` only produces candidate implementations, `evaluator.mjs` independently runs acceptance and gives only pass/fail plus location, and `orchestrator.mjs` neither writes code nor scores work, reading the decision only to choose the next step. One honest boundary should be clear here: the worker is a deterministic stub that emits prepared candidates in sequence, representing the artifact the execution role hands in each round; it is not an online large model. This Showcase demonstrates orchestration-layer control flow, does not compare model intelligence, and is not a model ranking of any kind.
+
+The task remains a function that converts a title into a URL slug, with acceptance defined by three cases: lowercase, hyphens, and punctuation removal. The two scenarios run the same orchestrator and the same acceptance checks, changing only worker candidates and retry budget.
+
+In the first scenario, the retry budget is 2. The worker misses lowercasing in its first version and adds it in the second. Here are the actual state transitions verified on 2026-07-11 under macOS and Node v24.11.0:
+
+```text
+$ node run.mjs
+===== 场景 A：预算内收敛（fail → retry → pass → stop） =====
+[state] INSPECT     task=slugify  acceptance=3 cases  retry_budget=2
+[state] IMPLEMENT   attempt=1/3  worker applied candidate #1
+[state] VERIFY      attempt=1       FAIL  case="lowercases and hyphenates"  expected=hello-world  actual=Hello-World
+[route] RETRY       budget used 1/2, 1 left -> IMPLEMENT
+[state] IMPLEMENT   attempt=2/3  worker applied candidate #2
+[state] VERIFY      attempt=2       PASS  3/3 cases
+[stop]  STOP_DONE   reason=all-acceptance-passed  exit=0
+[result] outcome=done  attempts=2  exit=0
+```
+
+This section lays out four decisions—order, routing, retry, and stop: INSPECT first clarifies acceptance; after VERIFY fails, ROUTE reads the decision and, finding one unit of budget remaining, routes back to IMPLEMENT. After the second version passes, it follows STOP_DONE with exit code 0. The process uses one retry and converges within budget.
+
+In the second scenario, the retry budget is only 1. The worker gets stuck, and both versions still miss lowercasing. It proves that the escalation exit is real control flow, not decoration:
+
+```text
+===== 场景 B：撞预算升级（fail → retry → fail → escalate） =====
+[state] INSPECT     task=slugify  acceptance=3 cases  retry_budget=1
+[state] IMPLEMENT   attempt=1/2  worker applied candidate #1
+[state] VERIFY      attempt=1       FAIL  case="lowercases and hyphenates"  expected=hello-world  actual=Hello-World
+[route] RETRY       budget used 1/1, 0 left -> IMPLEMENT
+[state] IMPLEMENT   attempt=2/2  worker applied candidate #2
+[state] VERIFY      attempt=2       FAIL  case="lowercases and hyphenates"  expected=hello-world  actual=Hello-World
+[route] BUDGET      exhausted after 2 attempts -> ESCALATE
+[stop]  ESCALATE    reason=retry-budget-exhausted  handoff=human  exit=1
+[result] outcome=escalated  attempts=2  exit=1
+```
+
+The second VERIFY still fails, but this time the budget is exhausted. The state machine no longer returns to IMPLEMENT; instead, it follows ESCALATE with `handoff=human` and exit code 1. The overall exit code of `run.mjs` is 2: whenever any scenario ends by escalating, it exposes the fact that “a human must take over” to upstream scripts through an exit code rather than quietly swallowing it.
+
+What this Showcase proves is that orchestration's five decisions—order, routing, retry budget, stop, and escalation—can all be made observable, reproducible state transitions; stop and escalation are two real branches, triggered respectively by Scenario A and Scenario B. What it does not prove is this: the worker is a deterministic stub, not an online model, so it does not compare model capabilities; one convergence does not mean a real task is reliably solvable over the long term. Real orchestration must still incorporate capabilities, constraints, sandboxes, CI, and human approval.
+
+## How the orchestration layer divides work with the other five layers
+
+The orchestration layer closes the harness narrative, but it is responsible only for control flow, not content, capabilities, boundaries, data, or decisions. If you cannot distinguish these boundaries, you will cram into orchestration problems that belong elsewhere.
+
+- The instruction layer answers “how each role should act.” Instructions are the content fed to roles; orchestration decides who acts in what order and who accepts the work. Instructions are content; orchestration is control flow.
+- The capability layer answers “what a role can call.” Capabilities are the tool list; orchestration decides which tool may be called at which step of the state machine.
+- The constraint layer answers “what must absolutely not be done.” Constraints are hard boundaries before actions occur, enforced by deny rules, sandboxes, and approvals; orchestration's escalation exit is the line triggered only when constraints cannot resolve the issue and human judgment is needed.
+- The state layer answers “what must be remembered for the next round.” State is data, storing goals and evidence of the last failure; orchestration is the machine that reads and writes state and chooses the next step.
+- The feedback and evaluation layer answers “how to judge pass or fail and turn the decision into action.” Evaluation produces a pass/fail decision, and feedback turns it into the smallest next change; orchestration is the control flow that, after reading that signal, decides routing, retry, stop, and escalation. Evaluation supplies the decision, feedback supplies the action, and orchestration supplies the control flow.
+
+One-sentence mnemonic: the other five layers prepare roles, tools, boundaries, data, and decisions; the orchestration layer decides in what order all of it flows, where it stops, and where it hands off to a human.
+
+## When not to use multiple Agents
+
+The orchestration layer does not mean “more Agents.” In the following situations, do not rush to split the work:
+
+- The task is short, bounded, and touches only one or two files. One worker plus one acceptance check is enough; more Agents only add coordination cost and integration burden.
+- Failure comes from missing tools or insufficient permissions. That belongs to the capability or constraint layer; no number of Agents can run a command that does not exist.
+- There is not yet acceptance that can produce pass/fail. First add a deterministic check—a test, a build exit code, or a script that diffs output against a fixture—otherwise no orchestration stopping condition has a signal to read.
+- Exploration is parallel but has no integration standard. Multiple Agents each write their own thing; without an evaluator that can judge right and wrong to close the loop, what you receive is only more text, not a more reliable result.
+
+One rule of thumb: if one worker, one independent evaluator, and a state machine with hard-coded stop and escalation conditions can complete a task reliably, do not add Agents. Only when the single-machine state machine genuinely cannot support one part should you split that part into an independent role, and give it acceptance and exits too.
+
+## Exercise: draw your task as a state machine
+
+Pick a recent task that made you think “I should start several Agents.” Do not split it yet; first fill this table using the seven decisions:
+
+```yaml
+顺序: 先做什么后做什么，哪些步骤可以裁剪
+角色: 谁执行谁判分，判分的是不是执行的那个
+路由: 一次验收的 pass/fail，接下来去哪一步
+重试: 失败后回哪一步，带着什么反馈
+预算: 重试和回合的硬上限是多少
+停止: 什么信号出现才算 done，谁事先约定的
+升级: 撞到什么条件就停手交人
+```
+
+If you cannot answer any row with “it maps to a real state or command,” that row is the weakest link in this orchestration. First complete it as a state machine with one worker and one evaluator, run it once, and observe whether it can converge by itself within budget and correctly escalate when it hits budget. Only when a particular part truly cannot hold up should you split it into an independent role. Do not add parallelism, routing, and long-term memory all at once, or you will not know which one actually made the difference.
+
+Completion criteria: all seven rows can point to a specific state, command, or decision; using only the state machine's exit code rather than a feeling, you can tell whether this run converged or should be handed to a human. If you still have to rely on “I think several Agents should be finished,” this audit is not yet complete.
+
+## Sources and further reading
+
+- [Claude Code official documentation: Best practices (order, gating, Writer/Reviewer, escalation)](https://code.claude.com/docs/en/best-practices)
+- [Anthropic: Effective harnesses for long-running agents](https://www.anthropic.com/engineering/harness-design-long-running-apps)
+- [Anthropic: Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)
+- [Harness Engineering Orange Book](https://github.com/alchaincyf/harness-engineering-orange-book)
+- [This article's research package and runnable Showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/orchestration-layer)
+
+The first three items are official primary sources supporting all current product behavior in this article, verified on 2026-07-11. The Stop-hook behavior of “ending a turn after 8 consecutive blocks” is the current implementation and may change with versions. The Orange Book, a secondary Chinese-language thematic map, helps confirm the orchestration layer's closing position in the harness narrative. Its repository is an educational sharing project that requires attribution; this article retains its link and attribution, but does not reproduce any images or extended text from it. The seven orchestration decisions, start-simple-then-add-complexity approach, and “escalate after consecutive failures or exhausted budget” are LearnPrompt's operational synthesis of official recommendations, not an industry-wide standard. The Showcase in this article has been reorganized and reverified; its worker is a deterministic stub, no online large model was run, and it does not constitute a ranking of any models.

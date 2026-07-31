@@ -1,0 +1,143 @@
+---
+title: Source Index and Licensing Boundaries
+description: Primary materials, secondary topic maps, field experiments, and content-licensing notes for every LearnPrompt section.
+sidebar:
+  hidden: true
+---
+
+## How to use this page
+
+This is not a copy of every footnote on the site. It is a source map. Each in-depth tutorial records its verification date and keeps the links actually used, together with their applicable boundaries, at the bottom of the page. This page helps you decide which kind of source to revisit when checking a claim.
+
+LearnPrompt divides evidence into three tiers:
+
+| Tier | Primary purpose | What it cannot prove on its own |
+| --- | --- | --- |
+| Primary sources | Verify product capabilities, commands, permissions, specifications, versions, and release status | They do not automatically prove that an article example fits your project |
+| Secondary topic maps | Discover problem spaces, cases, and learning structures | They cannot replace current official facts or automatically grant permission to republish |
+| Field experiments | Prove a specific Showcase with frozen fixtures, scripts, receipts, and reviews | They cannot be generalized to every version, environment, or permission combination |
+
+## AI coding, Claude Code, and Codex
+
+### Primary entry points
+
+- [Anthropic Claude Code documentation](https://code.claude.com/docs/en/overview)
+- [Claude Code best practices](https://code.claude.com/docs/en/best-practices)
+- [Claude Code security](https://code.claude.com/docs/en/security)
+- [OpenAI Codex documentation](https://developers.openai.com/codex/)
+- [Codex prompting](https://developers.openai.com/codex/prompting/)
+- [Codex Agent approvals & security](https://learn.chatgpt.com/docs/agent-approvals-security)
+- [Codex AGENTS.md guide](https://developers.openai.com/codex/guides/agents-md)
+
+For model names, execution surfaces, sign-in, sandboxes, approvals, Cloud, review, or CLI parameters, use these official pages plus the current `--help` output and actual UI. Do not infer them from secondary tutorials.
+
+### Secondary topic maps
+
+- [Claude Code Orange Book](https://github.com/alchaincyf/claude-code-orange-book)
+- [Claude Code Source Analysis Orange Book](https://github.com/alchaincyf/claude-code-source-analysis-orange-book)
+- [Codex Orange Book](https://github.com/alchaincyf/codex-orange-book)
+
+## Agent engineering, Skills, and Loop Engineering
+
+### Primary entry points
+
+- [Agent Skills specification](https://agentskills.io/specification)
+- [Anthropic Agent Skills](https://docs.anthropic.com/en/docs/agents-and-tools/agent-skills/overview)
+- [OpenAI Codex Skills](https://developers.openai.com/codex/skills/)
+- [CommonMark specification](https://spec.commonmark.org/)
+
+Articles about harnesses, feedback, orchestration, and loops also cite official product documentation, source repositories, or field experiments for the question at hand. No single official page can vouch for every implementation of these concepts.
+
+### Secondary topic maps
+
+- [Harness Engineering Orange Book](https://github.com/alchaincyf/harness-engineering-orange-book)
+- [Agent Skills Orange Book](https://github.com/alchaincyf/agent-skills-orange-book)
+- [Loop Engineering Orange Book](https://github.com/alchaincyf/loop-engineering-orange-book)
+
+## Obsidian, Markdown, and Git
+
+### Primary entry points
+
+- [Obsidian Help](https://obsidian.md/help)
+- [How Obsidian stores data](https://obsidian.md/help/Files%2Band%2Bfolders/How%2BObsidian%2Bstores%2Bdata)
+- [Obsidian Sync notes](https://obsidian.md/help/sync-notes)
+- [Git reference](https://git-scm.com/docs)
+- [Git worktree](https://git-scm.com/docs/git-worktree)
+- [Git diff](https://git-scm.com/docs/git-diff)
+
+Obsidian's files, properties, links, Search, and Sync capabilities come from its official documentation. Folder roles, placement contracts, handoff packets, and Git change gates are LearnPrompt editorial contracts; they are not presented as native Obsidian mechanisms.
+
+### Secondary topic maps
+
+- [Obsidian AI Orange Book](https://github.com/alchaincyf/obsidian-ai-orange-book)
+
+## Hermes Agent and OpenClaw
+
+### Primary entry points
+
+- [Hermes Agent documentation](https://hermes-agent.nousresearch.com/docs/)
+- [Hermes Agent GitHub](https://github.com/NousResearch/hermes-agent)
+- [OpenClaw documentation](https://docs.openclaw.ai/)
+- [OpenClaw GitHub](https://github.com/openclaw/openclaw)
+- [OpenClaw Gateway security](https://docs.openclaw.ai/gateway/security)
+- [OpenClaw API usage costs](https://docs.openclaw.ai/reference/api-usage-costs)
+
+Framework versions, protocols, scope, pairing, installation methods, and cost entry points change quickly. A frozen version in an article only states when it was verified; check the release, official documentation, and real runtime again before use.
+
+### Secondary topic maps
+
+- [Hermes Agent Orange Book](https://github.com/alchaincyf/hermes-agent-orange-book)
+- [OpenClaw Orange Book](https://github.com/alchaincyf/openclaw-orange-book)
+
+## Orange Book attribution and licensing boundaries
+
+The Orange Book repositories above are maintained by Huashu (Huashu / GitHub `alchaincyf`) and are important topic maps for this curriculum redesign. LearnPrompt does not hide that influence by removing attribution or sources.
+
+As of 2026-07-12, we read the `LICENSE` and README on each repository's current default branch and obtained the license matrix below. A GitHub API `spdx_id: null` or `NOASSERTION` only means the platform did not recognize a standard SPDX identifier; it does not establish that a repository declares no license.
+
+| Repository | Current declaration | Boundary when using it |
+| --- | --- | --- |
+| Claude Code Orange Book | README: CC BY-NC-SA 4.0 | May be shared and adapted under that license; attribution, non-commercial use, and ShareAlike are required |
+| Claude Code Source Analysis Orange Book | README: for education and research only, with trademark and leaked-code disclaimers | A custom statement; do not expand it into a standard open license |
+| Codex Orange Book | README: CC BY-NC-SA 4.0 | May be shared and adapted under that license; attribution, non-commercial use, and ShareAlike are required |
+| Harness Engineering Orange Book | README: for learning and discussion only; cite the source when quoting | A custom statement; it does not automatically allow commercial redistribution or adaptation |
+| Agent Skills Orange Book | README: personal and educational use; no commercial redistribution without authorization | Custom, non-commercial personal and educational-use boundaries |
+| Loop Engineering Orange Book | Repository `LICENSE`: MIT | May be used, copied, modified, and distributed under MIT, while retaining the license text |
+| Obsidian AI Orange Book | README: for learning and discussion; republication and quotation welcome with attribution | A custom attribution-and-sharing statement, not equivalent to CC/OSI licensing |
+| Hermes Agent Orange Book | Current repository `LICENSE`: MIT; README says 2.0 changed from the earlier CC BY-NC-SA 4.0 to MIT | Current version is MIT; still check the corresponding version when citing older materials |
+| OpenClaw Orange Book | README: content is for educational use only and related trademarks belong to their owners | A custom statement; it does not automatically permit copying, adaptation, or commercial distribution |
+
+Licenses apply to the material each repository covers; they do not automatically cover third-party screenshots, trademarks, upstream code, or externally linked assets.
+
+Accordingly, this project uses the following conservative boundaries:
+
+1. Orange Books are used for topic selection, problem maps, and leads to verify.
+2. Volatile facts return to primary sources or field experiments; descriptions in the books are not treated as current truth.
+3. PDF body text, screenshots, and images without an explicit covering relationship are not copied into public tutorials; third-party assets must also be excluded from MIT or CC repositories.
+4. When using material expressly authorized by a repository, record the author, original link, version, license, modification method, and verification date item by item; do not infer a license for an entire series from one book.
+5. Keep the actual Orange Book links used by, and the applicable boundaries for, every article at its bottom.
+
+## LearnPrompt's own field evidence
+
+Every verified in-depth tutorial has a `research/` directory containing at least:
+
+- `brief.md`: the reader task, scope, and non-goals.
+- `horizontal-research.md`: adjacent approaches, differences, and applicability boundaries.
+- `vertical-research.md`: a vertical evidence chain for key concepts.
+- `evidence-ledger.md`: a mapping between body claims and sources.
+- `asset-ledger.md`: image sources, licenses, modifications, and visual checks.
+- `review.md`: an independent reviewer's itemized conclusions, findings, and final verdict.
+- `showcase/`: frozen fixtures, scripts, outputs, and rejection cases; individual files are organized as each article requires.
+
+The research directory records how an article reached its conclusions; it is not a mirror of source material. Public MDX does not display an independent source-card component, but removing that component does not mean removing the sources.
+
+## How versions and broken links are handled
+
+- Product capabilities, commands, prices, permissions, and releases are high-drift information and are used according to the article's verification date.
+- An automated external-link check returning `403` only means the automated request was blocked. It must be checked manually in a browser and must not be marked valid or broken directly.
+- Deep research links that have not reached a public branch do not pass a publication-candidate gate; verify them after pushing, or replace them with stable links before publication.
+- When an official page moves, update it first to the current page on the same official domain, and retain the old link and reason for the change in the research record.
+
+## The previous course
+
+The previous LearnPrompt course remains available at [v1.learnprompt.pro](https://v1.learnprompt.pro/). It is a historical content entry point, not the factual, structural, or verification gate for the new tutorials.

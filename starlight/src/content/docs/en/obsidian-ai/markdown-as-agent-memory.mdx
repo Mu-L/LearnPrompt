@@ -1,0 +1,192 @@
+---
+title: When Does Markdown Count as Agent-Handoff Memory? Write Project Handoffs as Verifiable Records
+description: Learn to use a small Markdown handoff packet to record status, decisions, evidence, the next command, and limitations, so a newly started Agent session can continue the work.
+sidebar:
+  order: 1
+difficulty: intermediate
+source_repo: alchaincyf/obsidian-ai-orange-book
+source_url: https://github.com/alchaincyf/obsidian-ai-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-12"
+reading_time: 15 minutes
+research_path: research/articles/markdown-as-agent-memory
+showcase_path: research/articles/markdown-as-agent-memory/showcase/markdown-handoff-packet
+showcase_status: verified
+quality_score: 97
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Intermediate | 15 minutes | 2026-07-12 | LearnPrompt Editorial Team |
+
+Yesterday, you figured out why a “daily-report scheduler was drifting by 8 hours”: the problem was not that the model could not read code, but that the worker had fallen back to UTC while your acceptance fixture still treated Asia/Shanghai as the baseline. Today, you open a new session and ask an Agent that has just gained filesystem access to continue the work. What must it see so it does not have to reread the chat history, guess at the context, or write an old conclusion down as a new fact?
+
+Many teams’ first instinct is to export the entire chat, or turn “we discussed everything last time” into a loose Markdown meeting note. But what a new session actually needs is not the full chat transcript, but a small, firm handoff record: what the current status is, which decisions have been accepted, where the evidence is, what the next command is, what the known limitations are, which scope this record applies to, and when it was last verified. Only when all these fields are explicit can a newly started Agent treat it as an executable handoff packet instead of a pleasant, atmosphere-rich memoir.
+
+## What You Will Be Able to Do
+
+After reading this, you should be able to compress a cross-session handoff into a set of auditable Markdown files instead of continuing to rely on chat remnants:
+
+1. Write explicit `status`, `decision`, `evidence pointer`, `next command`, `known limitation`, `scope`, and `verified at` for every record.
+2. Distinguish a “handoff record” from a chat dump, product instruction file, task status, database entry, or secret store.
+3. Let a fresh Agent, with read-only access to the packet, produce a handoff result with exact path citations.
+4. Design rejection conditions so “memory” that lacks evidence, is contradictory, carries sensitive markers, or is not text fails outright.
+
+![After a fresh Agent reads five durable-record fields, it produces a citable handoff and enters rejection branches 41/42/43/44 when evidence is missing, records conflict, sensitive markers appear, or input is non-text](/images/articles/markdown-as-agent-memory/durable-memory-record.svg)
+*Caption: On the left are the fields a durable record must state explicitly; in the middle, a fresh Agent reads the packet and generates `handoff.json` and `handoff.md`; on the right, the four red branches are the `41 / 42 / 43 / 44` mechanical rejection conditions in this article’s Showcase.*
+
+:::note[State the boundary first]
+Markdown is only a carrier for a durable record; it does not automatically become product memory. Obsidian stores notes as ordinary files, Claude Code has its own `CLAUDE.md` and auto memory, and Codex has its own `AGENTS.md` instruction surface; but any Markdown file in any project enters this handoff only when you explicitly tell the Agent to read it.
+:::
+
+## Why “Having a Markdown File” Still Does Not Mean Agent Memory
+
+The question is not whether you wrote the content into `.md`, but whether the file satisfies the handoff contract.
+
+The Obsidian documentation establishes an important baseline for this topic: notes are Markdown plain-text files in the local filesystem, a vault is essentially a folder, and external editors and file managers can modify them directly. This makes Markdown well suited to handoff records because it is naturally compatible with filesystems, version control, and external scripts. But the same official documentation also implies the inverse: it only explains “how files are stored”; it does not promise that any Agent will automatically read any such file as memory.
+
+Look two layers deeper and this boundary becomes clearer:
+
+- Obsidian’s Properties documentation defines YAML properties as suitable for “small, atomic, human- and machine-readable” fields. That makes it useful inspiration for metadata such as `verified_at`, `scope`, and `status`.
+- The CommonMark specification defines Markdown syntax only; it does not define “what Agent memory is.”
+- The `git diff` documentation only tells you how to compare the working tree, index, commits, and files on disk; what it gives handoff records is auditability, not semantics.
+
+In other words, Markdown is suitable for a handoff packet not because it “comes with memory capabilities,” but because it meets three infrastructure requirements at once:
+
+1. People can read it directly without first deserializing a database.
+2. Agents can use ordinary file tools to read, search, cite, and write it back.
+3. Git can turn every addition, deletion, modification, and query in a handoff into a reviewable diff.
+
+If either item 2 or item 3 is missing, Markdown can also degrade into an ordinary memo. A `handoff.md` without fixed fields, evidence pointers, or a verification date is no different in handoff effect from pasting a chat log into a notepad.
+
+## A Handoff Record Must Answer at Least Six Questions
+
+A record that a fresh Agent can genuinely use does not need to be long, but it must lock down at least six questions. Leave out one, and the next session will start filling gaps with guesses.
+
+| Question | Why it must be written | Typical field |
+| --- | --- | --- |
+| What is the current status? | The Agent must first determine whether it is finishing follow-up work or still diagnosing the problem. | `Current status` |
+| What decision has been accepted? | Otherwise every new session may reopen the question of “should we change the approach?” | `Accepted decision` |
+| Why does that decision hold? | Without an evidence pointer, the record shifts from “auditable” to “please trust me.” | `Decision rationale` + `Evidence path` |
+| What is the next command? | A handoff is not a summary; it should reduce the next action to something executable. | `Next command` |
+| What are the known limitations? | Without limitations, a later session can easily mistake a local conclusion for a global truth. | `Known limitation` |
+| Where does this record apply, and when was it verified? | Without scope and date, an old record will continue to apply in the wrong place. | `Scope` + `Verified at` + `Provenance` |
+
+You will notice that this does not include “copy the complete summary of the previous chat.” That is because a handoff packet aims not to preserve the narrative, but to preserve the minimum truth required for the next execution.
+
+This article’s frozen fixture compresses those six questions into five files:
+
+```text
+MEMORY_INDEX.md
+memory/context.md
+memory/decision.md
+memory/runbook.md
+memory/status.md
+```
+
+Among them, `MEMORY_INDEX.md` only explains which files make up this record package. The other four files answer, respectively, the background, decision, next action, and current status. Every file includes `Scope`, `Verified at`, and `Provenance`, so the new session does not leave “who wrote it, when it was verified, and where it applies” to guesswork.
+
+## Why It Is Not a Chat Dump, AGENTS, Task Status, Database, or Secret Vault
+
+To write a handoff packet correctly, the most effective method is not to learn a new term, but to first learn to exclude several things that resemble it most closely but are not it.
+
+| Looks very similar | What it actually solves | Why it is not the durable record in this article |
+| --- | --- | --- |
+| Chat dump | Preserves the full conversation trail | It is too long, its fields are unstable, and evidence and decisions are often mixed together; a fresh Agent must summarize it a second time. |
+| `CLAUDE.md` / `AGENTS.md` | Provides the product with persistent instructions, conventions, and ways of working | They are an instruction surface, not the handoff record for one project incident; they are better for rules than for “the evidence and next command for this timezone drift.” |
+| Task status card | Shows how far a task has progressed | Its lifecycle usually covers only the current task; it should be retired once the task ends, not impersonate a long-term handoff record. |
+| Database or issue system | Stores large volumes of structured, queryable, transactional data | It is suitable for managing complete state, not for handing the minimum context to a fresh Agent; direct exposure is also often too heavy. |
+| Secret or environment-variable documentation | Solves secret injection | No secret should enter a handoff packet; a handoff record writes only the fact that a secret is required, never the value itself. |
+
+The most easily confused part here is the product boundary.
+
+Claude Code’s official memory documentation makes this quite direct: every session starts from a fresh context window, and both `CLAUDE.md` and auto memory are materials that are “loaded into context,” not enforced configuration. So `CLAUDE.md` is more like a long-term rulebook, not a project handoff slip for one incident. Codex’s official `AGENTS.md` guide likewise emphasizes that it reads these files before working to understand project conventions and ways of working. It too is an instruction surface, not a universal protocol under which “all Markdown automatically becomes memory.”
+
+The relationship between the packet in this article and those files is only this: you can use `CLAUDE.md` or `AGENTS.md` to tell an Agent “read `memory/status.md` first,” but the packet itself remains a human-auditable project record and does not magically become a product memory feature.
+
+:::caution[Do not hand off secrets too]
+If a record requires a secret, write “valid credentials are required before running the next command,” rather than putting a token, cookie, session id, or local absolute path into the record. This article’s Showcase uses `43` specifically to reject this kind of input that “looks structurally like a handoff but contains a sensitive marker.”
+:::
+
+## How Five Files Can Let a Fresh Agent Produce a Cited Handoff Directly
+
+The key to a handoff-ready packet is not that “every file looks like documentation,” but that each file has one responsibility.
+
+`memory/context.md` compresses the incident into a context the next session can reuse in one sentence: what happened, why it matters, and what the evidence summary is. `memory/decision.md` pins down the accepted choice, such as “continue to use Asia/Shanghai as the canonical timezone,” and provides rationale and an evidence pointer. `memory/runbook.md` writes only the next command and the verification command, avoiding burying “what to do” in a paragraph of narrative. `memory/status.md` answers whether the work is still blocked and what known limitations remain. `MEMORY_INDEX.md` tells the fresh Agent that this package consists of only these five files, what questions it can answer, and that it should not guess at a sixth invisible file.
+
+This is why this article’s Showcase explicitly requires a fresh `gpt-5.5` Codex invocation to read only these five files and then write `reports/handoff.json` and `reports/handoff.md`. Whether a handoff works does not depend on whether the model “realized the context”; it depends on two things:
+
+1. Whether it can directly copy the fields in the packet and accurately answer the status, decision, evidence, next command, and limitations.
+2. Whether it provides exact file-path citations in its output so later readers can return to the packet itself to verify them.
+
+The frozen fixture’s normal branch proves that this can be mechanically checked. Offline replay does not depend on an online model and reliably produces:
+
+```text
+exit_code: 0
+current_status: Blocked until the digest fixture is replayed with Asia/Shanghai as the canonical timezone.
+accepted_decision: Keep Asia/Shanghai as the canonical scheduler timezone for this tutorial fixture.
+next_command: node scripts/replay-digest.mjs --timezone Asia/Shanghai
+cited_paths: MEMORY_INDEX.md, memory/context.md, memory/decision.md, memory/runbook.md, memory/status.md
+```
+
+The real live run uses fresh `gpt-5.5`, reads only the five packet files, and writes only `reports/handoff.json` and `reports/handoff.md`. Mechanical checks confirm that the source packet is unchanged, that both live reports match the deterministic reference, that all assertions pass, and that the output does indeed cite five exact paths. The first writer-side invocation once failed because the command shape was incompatible; the outer controller did not alter that history, but instead reran successfully under the same frozen contract after correction. An independent read-only final review subsequently confirmed this evidence chain with `97/100`, `0 blocker / 0 major / 0 minor`, and visual PASS, and only then was this article marked `verified`.
+
+## Why 41 / 42 / 43 / 44 Should Be Rejected Directly
+
+A genuinely durable handoff record must not only know how to pass; it must also know how to reject. This article’s frozen showcase does not leave “bad packets” for reviewers to catch by eye, but gives them stable exit codes.
+
+`41` rejects “missing evidence or missing provenance.” The most common illusion in this kind of file is that it appears to have completed a handoff while actually leaving only a conclusion, without telling the next session where to verify it. For example, if there is an `Accepted decision` but no `Evidence path`, it is no longer an auditable record, only an unsupported verbal ruling.
+
+`42` rejects “a conflict between status and decision.” In this article’s negative example, `memory/decision.md` says the canonical timezone is `Asia/Shanghai`, but `memory/status.md` simultaneously requires a rerun with `UTC`. As long as both can coexist, the fresh Agent has no reason to trust either one as the latest truth.
+
+`43` rejects “structured sensitive markers.” Some teams know not to put real tokens in the packet, so they switch to “also write a session-id placeholder in the packet.” This still teaches later sessions to look for secrets rather than evidence and actions. This article lists this input as a separate category precisely as a reminder: handoff records should describe permission requirements, not preserve secret slots.
+
+`44` rejects “binary or non-text memory.” This is especially important because many people also call screenshots, exported PDFs, and compressed database snapshots “memory.” They can certainly be evidence, but they are not durable records that a fresh Agent can directly read, cite, and copy fields from. A `.md` extension containing a PNG header is still binary in essence; the suffix does not make it handoff-ready.
+
+Put differently, this article’s contract is not “any Markdown counts as a handoff,” but “only material that meets the requirements for fields, evidence, scope, date, and text readability may be treated as a handoff.”
+
+## When Not to Use a Markdown Handoff Packet
+
+This method is not something to use every time.
+
+If you need to express long-term rules, such as “which test to run first in this repository by default,” “which directories cannot be modified,” or “which commit-message conventions apply,” write them in an instruction surface such as `CLAUDE.md` or `AGENTS.md`, rather than putting them into a handoff packet for a single incident.
+
+If you need to manage large amounts of frequently changing, queryable state that requires concurrent updates by many people, such as release pipelines, ticket queues, inventory, or analytics reports, put it in a database, issue system, or structured backend. A Markdown packet is suitable for “the minimum truth the next person taking over must know immediately,” not the entire system’s runtime fact table.
+
+If you only want to preserve the complete context, a chat dump can of course be archived separately, but it should exist as raw evidence or an appendix rather than directly pretending to be a handoff record. What a fresh Agent needs are executable fields, not a dozen paragraphs of back-and-forth reasoning.
+
+Finally, if a piece of information would become a security incident when leaked, do not put it into a packet just because “this is only an internal handoff.” Secrets should still remain in environment variables, secret managers, or permission systems.
+
+## Hands-on Exercise: Compress Your Project Handoff into a Minimal Packet
+
+Choose a problem you have investigated recently but will likely hand off to a new session again, and work through the following order:
+
+1. Start by writing only five files: `MEMORY_INDEX.md`, `memory/context.md`, `memory/decision.md`, `memory/runbook.md`, and `memory/status.md`.
+2. At the top of every file, write `Record kind`, `Scope`, `Verified at`, and `Provenance`.
+3. Ensure the whole packet can clearly answer six questions: current status, accepted decision, decision rationale/evidence, next command, known limitations, and scope plus verification date.
+4. Then write a minimal gate: fail if `Evidence path` is missing, fail if status and decision conflict, fail if a sensitive marker appears, and fail if a file is non-text.
+5. Finally, let a new session read only these five files and require it to write a handoff with exact path citations.
+
+The completion criterion is not “you think it feels complete,” but that all four of the following hold at once:
+
+- The new session can answer the current status and next command without reading the chat history.
+- The output cites exact file paths, rather than “from some note.”
+- The packet source files remain unchanged after reading.
+- You can explain clearly why this record is not a chat dump, not `AGENTS.md`, not task status, and not a secret vault.
+
+If, after doing this, you find that a fresh Agent still has to guess for itself “why this decision was made,” return to the packet and make `Decision rationale` and `Evidence path` explicit. Most handoff failures happen because these two items were omitted.
+
+## Sources and Further Reading
+
+- [Obsidian official documentation: How Obsidian stores data](https://obsidian.md/help/Files%2Band%2Bfolders/How%2BObsidian%2Bstores%2Bdata)
+- [Obsidian official documentation: Properties](https://obsidian.md/help/properties)
+- [CommonMark Spec 0.31.2](https://spec.commonmark.org/spec)
+- [Git official documentation: git diff](https://git-scm.com/docs/git-diff)
+- [Claude Code official documentation: How Claude remembers your project](https://code.claude.com/docs/en/memory)
+- [OpenAI Codex official documentation: Custom instructions with AGENTS.md](https://developers.openai.com/codex/guides/agents-md)
+- [Obsidian AI Orange Book](https://github.com/alchaincyf/obsidian-ai-orange-book)
+- [This article’s research pack and frozen showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/markdown-as-agent-memory)
+
+The first six are primary or official materials for current behavior: respectively, they support “how Obsidian files are stored on disk,” “YAML properties are suitable for small atomic fields,” “Markdown syntax itself does not define Agent memory,” “why Git diff can audit file changes,” “Claude Code’s `CLAUDE.md` / auto memory are context rather than enforced rules,” and “Codex reads `AGENTS.md` as a project instruction surface before working.” `Obsidian AI Orange Book` serves only as a Chinese topic map and adjacent-topic reference. Its author is Huashu / alchaincyf, and the repository README states that it may be shared with attribution for learning and communication; it is not a standard CC/OSI license. This article does not copy its PDF body text, screenshots, or images; it uses only official pages, one original instructional graphic, and a synthetic fixture.

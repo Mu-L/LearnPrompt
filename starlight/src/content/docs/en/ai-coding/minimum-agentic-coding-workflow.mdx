@@ -1,0 +1,226 @@
+---
+title: "The Minimum Agentic-Coding Workflow: Run One Task as a Plan → Patch → Verify → Learn Loop"
+description: Use a four-step operating model to complete one real small change, grounded in plan mode, readable diffs, executable acceptance, and writing rules back, with a reproducible boundary failure.
+sidebar:
+  order: 2
+difficulty: beginner
+source_repo: alchaincyf/harness-engineering-orange-book
+source_url: https://github.com/alchaincyf/harness-engineering-orange-book
+updated_from: "2026-05"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-11"
+reading_time: 13 minutes
+research_path: research/articles/minimum-agentic-coding-workflow
+showcase_path: research/articles/minimum-agentic-coding-workflow/showcase
+showcase_status: verified
+quality_score: 94
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Beginner | 13 minutes | 2026-07-11 | LearnPrompt Editorial Team |
+
+You tell a coding agent, “Help me make this function good.” Ten minutes later, it has changed one version and says it is finished. You run it and it is broken. Looking back at the chat, you neither know what it planned to change nor have an objective signal for which step failed. Worse, the same kind of task will hit the same pitfall next time.
+
+The same model is dependable when you give it a small, sliced task with runnable acceptance, and repeatedly fails when you give it everything at once. The difference is usually not model intelligence, but whether you run “one task” as a closed loop with an artifact, a signal, and a write-back. This article gives you that minimum loop and runs it on a reproducible real small task.
+
+## What you will be able to do
+
+1. Complete one real small change in four steps: write a plan, cut a readable diff, run the fastest check, and write the lesson back into project rules.
+2. Explain the primary capability each step is grounded in and what it degrades into when the step is missing.
+3. Decide which tasks suit this loop and when not to force it.
+
+![The artifacts, intercepted failures, and primary anchors for Plan, Patch, Verify, and Learn, with retrospective rules flowing back into the next plan](/images/articles/minimum-agentic-coding-workflow/four-step-loop.svg)
+*Caption: The four steps are not four slogans. Each creates an artifact and provides a corresponding guardrail; omitting a step loses that guardrail, and whether it is worth doing depends on task risk.*
+
+:::note[This is LearnPrompt’s operating model, not an industry standard]
+Plan → Patch → Verify → Learn is an operating rhythm we distilled for teaching. No vendor or standards organization defines it as an official process. It stands up because each step corresponds to a real primary capability, described below. Treat it as useful scaffolding, not a rule that must be copied exactly.
+:::
+
+## What each of the four steps is anchored to
+
+The four words themselves are cheap; what matters is the objective anchor behind each one. Once the anchors are clear, you can see what every step prevents.
+
+### Plan: stay read-only first and stop errors before they hit disk
+
+Planning separates “deciding what to change” from “making the change,” so directional errors are found when they are cheapest. This is not etiquette we invented; it is a product capability. Claude Code has plan mode, in which Claude reads files and proposes a plan without writing to disk until you approve (`claude --permission-mode plan`, or Shift+Tab within a session).
+
+A good plan is not a lengthy proposal, but four guardrails:
+
+- Goal: what visible behavior changes this time.
+- File scope and forbidden areas: which files are expected to change and which must never be touched.
+- Fastest check: which command confirms completion.
+- Rollback: how to return safely after failure.
+
+### Patch: each change carries only one decision
+
+“Small slices” are not aesthetic; they are the prerequisite for reviewability. A practical test is whether you can read this `git diff` in five minutes. A git diff is line-by-line change, and people can reliably review only a limited amount at once. Once a diff both changes implementation, opportunistically refactors, and edits other files, review degrades into “it looks fine.”
+
+The rule is therefore firm: one patch carries one decision. If the diff is already too large to want to read, the task was cut too large; ask the agent to stop and summarize instead of continuing to pile on changes.
+
+### Verify: use an exit code, not the model’s self-report
+
+Verification is not asking, “Are you done?” It is running the fastest relevant check and looking at the exit code. The `AGENTS.md` open format, used by more than 60,000 projects, says this directly: put programmatic checks in it, and agents will try to run them and fix failures before completion. The key is “executable”—a command can actually run and produce an exit code; an adjective cannot.
+
+A common check sequence—not every project has every step, so inspect `package.json`, the README, and CI before choosing—is:
+
+1. Syntax or type checks.
+2. Unit tests or relevant tests.
+3. The build command.
+4. Local preview or manual inspection of key pages and the diff.
+
+### Learn: write lessons back into durable instructions
+
+Retrospectives are the largest difference between agentic coding and ordinary chat. Claude Code has two cross-session paths: durable instructions you maintain, such as `CLAUDE.md`, and auto memory that Claude records from user corrections. The Learn step here deliberately uses the first path, because explicit rules can enter version control, be reviewed, and leave before/after evidence. You cannot assume an experience that was not explicitly distilled from chat will appear next time.
+
+The retrospective action is concrete: turn one failure into a rule that changes next behavior, and write it into `AGENTS.md`, `CLAUDE.md`, or the README. A verifiable rule such as “Run npm test before committing” is much more useful than “pay attention to quality.”
+
+:::caution[Writing back is a context layer, not an enforcement layer]
+Writing “do not touch `.env`” in CLAUDE.md is only a reminder. To make it a hard boundary, use a PreToolUse hook, permission deny rule, or sandbox. Retrospectives make the next attempt less error-prone; truly irreversible actions still need human approval and tool enforcement outside the loop.
+:::
+
+## Scale by risk; do not use the full ritual every time
+
+The four steps are a rhythm, not a ceremony. Scale them by task risk and irreversibility:
+
+| Task type | Plan | Patch | Verify | Learn |
+| --- | --- | --- | --- | --- |
+| Change one line of copy or try an idea and delete it | One sentence | One slice | Optional | Optional |
+| Add one component to a page | Four guardrails | Slice by slice | Fastest check required | As needed |
+| Repeated or high-risk changes | Complete | Slice by slice | Required; inspect the exit code | Rule write-back required |
+
+It is fine to omit Verify and Learn for low risk; for high-risk or repeatedly failing tasks, these are exactly the two steps you should not omit.
+
+## Showcase: run all four steps on a minimum controlled task
+
+This is not a prompt demonstration but a real run. The task is a purely local, dependency-free, deterministic function, `splitEvenly(totalCents, people)`: split a bill into integer cents among people while requiring the sum of all shares to equal the total exactly. It has a natural boundary—simple rounding can lose or add cents—so Verify can catch a printable real failure. Complete reproducible material is in the research package linked in the sources section below.
+
+### Step 1, Plan: four guardrails
+
+```md
+# Plan
+- Goal: implement splitEvenly so node --test is all green.
+- File scope: change only split-bill.mjs.
+- Forbidden areas: do not change split-bill.test.mjs (the acceptance standard) or the check command in AGENTS.md.
+- Fastest check: node --test
+- Rollback: before committing, use git restore split-bill.mjs to revert.
+```
+
+### Step 2, Patch · slice one: make only the even-split decision
+
+Deliberately do not handle the remainder yet. Let the next acceptance step expose that gap, rather than combining equal splitting and remainder repair in the same change. This slice has only a few diff lines:
+
+```diff
+-  // TODO: implement
+-  return [];
++  // Slice one: first do the most direct even split (rounding to cents).
++  const each = Math.round(totalCents / people);
++  return Array(people).fill(each);
+```
+
+### Step 3, Verify: the exit code supplies the fact
+
+Run the fastest check, `node --test`. It does not ask how we feel; it fails directly and prints the reason:
+
+```text
+✔ everyone receives the same amount when division is exact
+✖ fastest check: the sum of every split result must strictly equal the total (conservation)
+  AssertionError: sum(3333,3333,3333) should be 10000, actually 9999
+ℹ pass 2
+ℹ fail 1
+# exit code: 1
+```
+
+`10000 / 3` rounds each person to 3333, and the three shares add to 9999, losing one cent from nowhere. This is not the model’s self-evaluation; it is a fact supplied by the environment. Exit code 1 makes “finished” decidable.
+
+### Step 4, Learn: write the lesson into AGENTS.md
+
+This pitfall is worth recording, or money splitting will hit it again next time. Write a rule that changes next behavior and append it to the project’s `AGENTS.md`:
+
+```diff
+ ## Code style
+ - Always represent amounts in integer cents to avoid floating-point errors.
++
++## Retrospective rule (written back, 2026-07-11)
++- For money-splitting tasks, write a “sum conservation” assertion (the sum of parts strictly equals the total)
++  before implementation; rounding or flooring loses remainders, which must be added back one cent at a time.
++- Slice order: slice one only makes the even split and exposes the remainder gap with the conservation assertion;
++  slice two repairs the remainder separately.
+```
+
+With that rule, slice two distributes the remainder: floor to establish the base, then give one extra cent to the first few people. Run the fastest check again:
+
+```text
+✔ everyone receives the same amount when division is exact
+✔ fastest check: the sum of every split result must strictly equal the total (conservation)
+✔ the difference between any two adjacent people is no more than 1 cent
+ℹ pass 3
+# exit code: 0
+```
+
+The exit code changes from 1 to 0 and the loop closes. Note that the Learn rule is experience from this task, not a universal law; its value is that it will be read as context at the start of the next similar task.
+
+## When not to force this loop
+
+- A one-off, zero-risk small experiment: writing four steps may cost more than the benefit; something you run and delete does not need a rule.
+- You cannot even write what success is: define the task first rather than forcing the loop. If acceptance cannot be defined, Verify has nothing to do.
+- The loop guarantees guardrails, signals, and write-backs, not correct content: a broken Verify check will still let bad results through.
+- Irreversible high-risk actions—publishing, deleting cloud data, or sending messages—must add human approval and tool enforcement outside the loop. A final “please be careful” in the prompt is not a boundary.
+
+## A copyable four-step prompt
+
+Give the following to any coding agent without allowing it to modify files immediately:
+
+```md
+Do not modify files yet. In step one, give me only a plan:
+- Which files will you read? Which do you expect to change? What is the smallest deliverable slice?
+- Which files, configuration, and secrets must not be touched?
+- Which fastest command accepts the result? How do we roll back after failure?
+
+After I approve, in step two make only the first slice. Keep the change small and do not opportunistically refactor. When done, list: which files changed, why each changed, and which check should run next.
+In step three, run that fastest check and show me real output and its exit code; do not substitute “it should be fine.”
+In step four, if this task hit a pitfall, write one rule that changes next behavior and append it to AGENTS.md or CLAUDE.md.
+```
+
+## Common anti-patterns
+
+- Begin a broad refactor without a plan and discover the direction was wrong only afterward.
+- Hide several decisions in one diff, leaving review to blind trust.
+- Ask only whether the model is finished, without running any real command.
+- Have one agent handle design, data, deployment, and copy at once, making failures impossible to locate.
+- Write only feelings in a retrospective, not one executable rule that can be read next time.
+
+## Exercise: run it once in your own repository
+
+Choose a real small task you have (add a component, fix a specific build error, or add error handling to a script), run all four steps, and leave checkable evidence:
+
+```md
+Plan: show your four guardrails (goal / scope and forbidden areas / fastest check / rollback).
+Patch: show the first slice’s git diff and confirm it can be read in five minutes.
+Verify: show real output and the exit code of the fastest check, not “I ran it.”
+Learn: if you hit a pitfall, show the one rule you wrote back into AGENTS.md or CLAUDE.md.
+```
+
+The completion standard is objective: each of the four sections has checkable evidence (a diff, exit code, and written-back diff), not merely “I finished it.” If you cannot show an exit code for Verify, you have not actually verified it.
+
+## Minimum acceptance checklist
+
+Before every finish, ask yourself:
+
+- Did I produce a plan before acting?
+- Can I read this `git diff` in five minutes?
+- Did I run at least one real check and inspect its exit code?
+- Did I write this lesson back as one rule that will be read next time?
+
+## Sources and further reading
+
+- [Claude Code common workflows (plan mode)](https://code.claude.com/docs/en/common-workflows)
+- [Claude Code memory (`CLAUDE.md` is context, not enforced configuration)](https://code.claude.com/docs/en/memory)
+- [AGENTS.md open format (executable programmatic checks)](https://agents.md)
+- [git diff manual](https://git-scm.com/docs/git-diff)
+- [git revert manual](https://git-scm.com/docs/git-revert)
+- [Harness Engineering Orange Book](https://github.com/alchaincyf/harness-engineering-orange-book)
+- [This article’s research package and runnable Showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/minimum-agentic-coding-workflow)
+
+The Claude Code, AGENTS.md, and git documentation above are primary official sources supporting current product behavior and commands, all checked on 2026-07-11. The Harness Engineering Orange Book is used here only as a Chinese secondary topic map: its repository says educational sharing requires attribution and does not use a standard open license, so this article retains only its link and attribution and does not copy or adapt any images. The Plan → Patch → Verify → Learn structure, argument, and Showcase were reorganized and re-verified by LearnPrompt. The teaching diagram is original work by the LearnPrompt Editorial Team and uses CC BY-NC-SA 4.0.

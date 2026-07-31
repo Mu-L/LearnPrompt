@@ -1,0 +1,161 @@
+---
+title: "Plan, Auto, and Human-Approval Boundaries: Delegate by Risk, Not Trust"
+description: Use three risk tiers—read-only planning, ordinary automatic execution, and human-approved actions—to decide which coding-agent actions may run automatically, then choose the right permission primitives in Claude Code and Codex.
+sidebar:
+  order: 4
+difficulty: beginner
+source_repo: alchaincyf/codex-orange-book
+source_url: https://github.com/alchaincyf/codex-orange-book
+updated_from: "2026-05"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-11"
+reading_time: 12 minutes
+research_path: research/articles/plan-auto-approval-boundary
+showcase_path: research/articles/plan-auto-approval-boundary/showcase
+showcase_status: verified
+quality_score: 89
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Beginner | 12 minutes | 2026-07-11 | LearnPrompt Editorial Team |
+
+You ask an agent to fix a small bug, and it casually runs `git push`, sending an unverified branch to the remote. What would you say in the retrospective? Probably: “I thought it would be more careful.” That sentence is exactly the problem. Delegating based on trust in the model hands an irreversible action to a probabilistic system and expects it to restrain itself.
+
+The stable approach is to delegate according to the risk of the action, with boundaries mechanically enforced by tools rather than by the model’s self-discipline. This tutorial gives you a three-tier risk model and maps it onto the very different permission primitives in Claude Code and Codex. The terminology is easy to blur together, so we will keep the two systems distinct throughout.
+
+## What you will be able to do
+
+You will leave with three things you can use immediately:
+
+1. A three-tier boundary based on reversibility and blast radius: read-only planning, ordinary automatic execution, and high-risk actions requiring human approval.
+2. A clear configuration mapping for the same boundary in Claude Code and Codex, without mixing their terminology.
+3. Evidence produced by actually running `codex sandbox`, showing that a boundary can be enforced by the kernel rather than by trust.
+
+![Three risk tiers mapped to the distinct permission primitives of Claude Code and Codex](/images/articles/plan-auto-approval-boundary/risk-tier-primitives.svg)
+*Caption: The same risk classification is implemented with permission modes plus allow/ask/deny rules in Claude Code, and approval policies plus sandbox modes in Codex. Notice whether each tier is enforced at the application layer or OS layer—the two vocabularies are not interchangeable.*
+
+## The unit of delegation is the action, not the model
+
+First, clear up a common mistake. Many people decide whether to delegate based on a model’s reputation or the sentence “I trust it.” That cannot work, because trust is not an executable policy. A model you trust today may change its judgment about the same instruction after a version update; and a push, cloud-data deletion, or secret change does not become recoverable because you trusted it beforehand.
+
+The right unit of judgment is the action itself, using two properties. The first is reversibility: can the action be undone? Reading a file writes nothing and can be stopped at any time; changing source code inside the workspace can be reverted with version control; pushing to a remote, deleting cloud data, or sending a message is hard to take back once it happens. The second is blast radius: which files, accounts, and external systems will an error touch? Changing one local file has the repository as its radius; changing production deployment or billing reaches the whole live system and your wallet.
+
+Put those two properties together and actions naturally fall into three tiers. Read-only exploration is the zero-risk planning tier. Reversible writes inside the workspace are the ordinary automatic-execution tier. Boundary-crossing or irreversible actions are the high-risk tier. This classification does not depend on which tool you use; it describes the task itself. The hard part comes next: a judgment framework is not an enforcement mechanism. Writing “please do not push” in a prompt is not a boundary—the model may still do it. For the boundary to work, it must be expressed through the tool’s permission primitives.
+
+## Claude Code: permission modes plus allow/ask/deny rules
+
+Claude Code separates what it may do along two axes, both enforced by the Claude Code program rather than by model self-restraint. The official documentation is explicit: permission rules are enforced by Claude Code. What you write in a prompt or `CLAUDE.md` only affects what the model wants to do; it does not change what Claude Code permits.
+
+The first axis is the permission mode, which sets the overall posture. `plan` mode reads files and runs read-only commands for exploration, without changing source files, which fits the read-only planning tier. `acceptEdits` automatically accepts edits in the working directory and common file commands such as mkdir, touch, mv, and cp, which fits ordinary automatic execution. `default` (called Manual in the CLI) prompts when each tool is first used. There are also `auto`, `dontAsk`, and `bypassPermissions`, the last of which should only be used in an isolated container. Verify locally with `claude --help` (2.1.206): `--permission-mode` accepts acceptEdits, auto, bypassPermissions, manual, dontAsk, and plan.
+
+The second axis is the permission rule, which determines the fate of each individual tool call: allow, ask, or deny. Their evaluation order is fixed: deny first, then ask, then allow; the first matching rule decides the result. No amount of specificity changes that order. A deny at any level also overrides any allow. This matters because it lets you broadly permit Bash while pinning push to the high-risk side with `deny Bash(git push *)`.
+
+The three-tier boundary now has a definite Claude Code implementation. Use `plan` for read-only planning. Use `acceptEdits` for ordinary automatic work, together with allow rules for Edit and safe Bash, such as `allow Bash(npm run *)`. Make high-risk actions ask for confirmation with ask rules, or prohibit them outright with deny rules. An optional OS sandbox further constrains Bash and its child processes; it complements permission rules as defense in depth.
+
+## Codex: approval policy plus sandbox mode
+
+Codex also has two axes, but their names and semantics differ from Claude Code’s—exactly where mistakes are most common.
+
+The first axis is the approval policy (`approval_policy`, or `--ask-for-approval` on the command line). It determines when the model requests human approval. Local `codex --help` (0.142.2) lists four values and their official meanings: `untrusted` automatically runs only trusted commands such as ls, cat, and sed, escalating any command outside the trusted set; `on-request` lets the model decide when to request approval; `never` never requests approval and returns execution failures to the model; `on-failure` is deprecated.
+
+The second axis is the sandbox mode (`sandbox_mode`, or `--sandbox` on the command line). It defines OS-level file-system and network boundaries: `read-only`, `workspace-write`, and `danger-full-access`. One easily missed detail: outbound network access is disabled by default in workspace-write mode (`sandbox_workspace_write.network_access` defaults to false), and must be enabled explicitly.
+
+These axes are orthogonal. The sandbox determines what a command can touch after it runs; the approval policy determines when a human may be asked before it runs, but they do not map one-to-one. So implement the three tiers in Codex as follows: use read-only for planning; use workspace-write for clearly scoped ordinary automatic work, selecting an approval policy separately; and do not treat `on-request` as the only gate for high-risk actions, because whether it asks is the model’s judgment. The safest approach is to keep network and boundary-crossing capabilities off, stop the current task, and have a human explicitly confirm a new least-privilege task. `untrusted` can add another interception layer, but it classifies commands by the trusted-command set, not by your business-risk taxonomy.
+
+## Why the two vocabularies cannot be translated into each other
+
+At this point you might think plan mode and a read-only sandbox are both read-only, so perhaps they are the same thing. They are not, and the distinction matters.
+
+They are enforced at different layers. Claude Code’s plan is an agent behavior mode: the application constrains which tools the model can call, so it lives at the application layer. Codex read-only is a kernel sandbox: the operating system directly rejects write system calls, so it lives at the OS layer. Both look read-only from the outside, but one prevents the application from trying while the other prevents the process from succeeding. Understanding this difference tells you their fallback strength and bypass risks.
+
+Likewise, Claude Code’s allow/ask/deny rules are deterministic rules you write in advance: if a rule matches, it is followed. In Codex, `on-request` in the approval policy lets the model judge on the spot whether to ask. Treating an allow rule as equivalent to an approval policy makes you expect one product to behave like the other. That is why this article keeps them separate, and why you should look up the primitives of the tool you actually have rather than applying another product’s names.
+
+## Showcase: actually run the three tiers through a sandbox
+
+An abstract boundary only counts once it can be verified. The following small task exercises the line between ordinary automatic execution and high-risk actions, demonstrating that the kernel enforces it rather than the model being polite.
+
+The task is tiny: fix a billing-function bug where integer division loses cents. The project contains `split.py` and `test_split.py`, initialized with git in a temporary directory outside the repository. We do not care how a model fixes it. We only use Codex’s `codex sandbox` subcommand to run the same actions under different sandbox modes. This subcommand invokes the sandbox directly, without a model, so the result is deterministic and reproducible.
+
+At the read-only tier, reading source succeeds directly under read-only:
+
+```text
+$ codex sandbox -c sandbox_mode=read-only -- cat split.py
+def split_bill(total, people):
+    # bug: integer division loses cents
+    return total // people
+exit=0
+```
+
+For the same write action, read-only rejects it while workspace-write allows it. Notice that the rejection says `Operation not permitted`, returned by the kernel—not a model politely declining:
+
+```text
+$ codex sandbox -c sandbox_mode=read-only -- sh -c 'echo x >> split.py'
+sh: split.py: Operation not permitted
+exit=1
+
+$ codex sandbox -c sandbox_mode=workspace-write -- sh -c 'echo # patched >> split.py'
+exit=0
+```
+
+One tier higher, even after switching to workspace-write, this experiment still rejects writes to `$HOME` and network access. That shows these capabilities are not automatically opened with workspace writes; it does not prove that every platform and every temporary directory uses the same policy. A genuinely high-risk action should cross this line only after stopping the current task and obtaining explicit human reauthorization, not by relying on the model to raise its hand under `on-request`:
+
+```text
+$ codex sandbox -c sandbox_mode=workspace-write -- sh -c 'echo pwned > $HOME/pab-blocked.txt'
+sh: $HOME/pab-blocked.txt: Operation not permitted
+exit=1
+
+$ codex sandbox -c sandbox_mode=workspace-write -- sh -c \
+    'curl -s -m 5 https://example.com >/dev/null && echo NET_OK || echo NET_BLOCKED'
+NET_BLOCKED
+exit=0
+```
+
+Here is the verdict table:
+
+| Action | read-only | workspace-write |
+| --- | --- | --- |
+| Read workspace files | Allowed | Allowed |
+| Write workspace files | Rejected | Allowed |
+| Write outside the workspace (`$HOME`) | Rejected | Rejected |
+| Outbound network | Not tested here | Rejected (disabled by default) |
+
+This experiment ran only on macOS Seatbelt; other platforms’ implementations and error messages were not verified here. It demonstrates the OS-sandbox axis only, not Codex’s approval policy; the two remain separate. Full environment details, raw excerpts, and reproduction commands are in the [Showcase directory](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/plan-auto-approval-boundary/showcase). Raw output was captured outside the repository and added only after redaction; no push, deployment, or irreversible action was performed.
+
+## When this boundary can fail
+
+Drawing a boundary once is not enough. Several failures are especially common.
+
+The most common is treating workspace-write as safe. It blocks access outside the workspace and network access, but destructive things can still happen within the workspace: `git reset --hard` or overwriting source files are both inside that boundary. So high-risk workspace actions still need separate ask or deny rules, or a human present.
+
+The second trap is writing only “don’t push” in the prompt. As repeated above, a prompt is not a boundary. To prohibit it for real, express it in a deny rule or sandbox.
+
+The third is platform and version drift. Sandbox availability varies by operating system, and so do interception messages; product mode names and defaults change over time. Mark the platform and version for any conclusion about current behavior, re-check before publishing, and do not mistake old screenshots for current facts.
+
+Finally, do not misuse isolation-bypass modes. Modes such as bypassPermissions and danger-full-access, which skip everything, belong only in genuinely isolated containers or virtual machines. Even if they retain circuit-breaker prompts for something like rm -rf at the root, they do not replace real isolation. Enabling them on your everyday workstation removes the boundary entirely.
+
+## Exercise: make a permissions-boundary card for your task
+
+Pick a real task you have and, in no more than ten lines, write the card below. Then configure it in the tool you use:
+
+```yaml
+task: 要交付什么
+readonly_tier: 哪些是只读探索（读文件、跑测试查询）
+auto_tier: 哪些是可撤销、影响半径在仓库内的写入
+approval_tier: 哪些不可逆或触及外部系统，必须人工批准
+rollback: approval_tier 里每个动作的回滚方案
+tool_primitive: 在 Claude Code 用 plan/acceptEdits/ask/deny，还是在 Codex 用 read-only/workspace-write，并把高风险动作留给任务外的人类 gate
+```
+
+The acceptance criterion is simple: for every item in approval_tier, you can explain why it is irreversible, how large its error radius is, and how to roll it back; and your tool actually pins it behind a rule or sandbox mode rather than merely mentioning it in a prompt. If you cannot answer any of those three points, improve the task definition and rollback plan before delegating.
+
+## Sources and further reading
+
+- [Claude Code permission configuration](https://code.claude.com/docs/en/permissions) (primary official documentation: permission modes, allow/ask/deny rules, and evaluation order)
+- [Claude Code sandboxing](https://code.claude.com/docs/en/sandboxing) (primary official documentation: the OS-level Bash sandbox and how it complements permissions)
+- [Codex configuration reference](https://developers.openai.com/codex/config-reference) (primary official documentation: approval_policy and sandbox_mode values)
+- [Codex security and sandboxing](https://developers.openai.com/codex/security) (primary official documentation: the relationship between approvals and sandboxes)
+- [Codex Orange Book](https://github.com/alchaincyf/codex-orange-book) (Chinese secondary topic map, used only to identify the topic)
+
+Current Claude Code and Codex behavior is based on official documentation and local CLIs checked on 2026-07-11 (claude 2.1.206, codex-cli 0.142.2). The Codex Orange Book retains attribution under the [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) stated by its repository; this article uses it only as a secondary topic map, while the structure, argument, and Showcase were independently rebuilt and checked.

@@ -1,0 +1,268 @@
+---
+title: "What Problems Are Multi-Agent Collaboration Suited to Solve?"
+description: "First draw a dependency graph, freeze interfaces and acceptance criteria, assign non-overlapping file ownership, then choose a single Agent, subagent, agent team, or worktree and verify results with a merge gate."
+sidebar:
+  order: 6
+difficulty: intermediate
+source_repo: alchaincyf/claude-code-orange-book
+source_url: https://github.com/alchaincyf/claude-code-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-11"
+reading_time: 14 minutes
+research_path: research/articles/multi-agent-collaboration
+showcase_path: research/articles/multi-agent-collaboration/showcase/order-report-pipeline
+showcase_status: verified
+quality_score: 93
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Intermediate | 14 minutes | 2026-07-11 | LearnPrompt Editorial Team |
+
+You have a somewhat larger task: a new frontend page plus a new backend endpoint, or a refactor involving three modules. Your first reaction is to open two or three Agents in parallel. The result? Two Agents modify the same files and the later write overwrites the earlier one; neither interface is settled, so each side writes its own version and fields do not match at merge; a later step clearly depends on the conclusion of an earlier one, yet you force parallelism and produce a pile of half-finished work that must be redone.
+
+The problem is not the tool itself. None of the three prerequisites for parallel work were met: no dependency graph, no frozen interface, and no non-overlapping file ownership. Starting from these three prerequisites, this article helps you make an evidence-based choice before work begins, then use a merge gate to stop conflicts before changes are applied.
+
+## What you will be able to do after reading
+
+1. Draw a dependency graph before splitting work, identifying tasks that are genuinely independent and those that must be serial.
+2. Freeze the shared interface (contract) on both parallel sides so their inputs and outputs align before merge.
+3. Give every worker non-overlapping file ownership, eliminating same-file overwrites at the source.
+4. Choose among a single Agent, subagent, agent team, worktree session, and independent reviewer on evidence.
+5. Run a zero-dependency merge-gate Showcase and personally see exit codes approve the positive case and reject negative cases.
+
+## Start with a real failure: why two Agents changing the same files causes trouble
+
+Claude Code's official documentation gives the hardest constraint:
+
+> Two teammates editing the same file leads to overwrites. Break the work so each teammate owns a different set of files.
+
+This is not advice; it is a mechanism-level consequence. Two independent sessions or processes each write to disk, and the last writer wins. No locking mechanism merges conflicts for you—you discover only after merging that half the changes disappeared. This constraint applies not only to agent teams, but to any two Claude Code sessions or subagents running in parallel.
+
+This yields three prerequisites for safe parallelism:
+
+1. **Dependency graph.** Which tasks are truly independent? If B must wait for A's conclusion before it can start, they cannot run in parallel regardless of how many Agents you open.
+2. **Frozen interface.** Parallel sides must first agree on an unchanging contract—field names, types, and formats. If either side wants to change the contract, it must unfreeze it, notify the other side, and realign before continuing; otherwise each side writes independently and fields do not match at merge.
+3. **Non-overlapping file ownership.** Each worker may modify only its owned file set; write sets are pairwise disjoint. This is the only way to eliminate overwrite risk at the source.
+
+Only after these three steps does parallel work become verifiable rather than a gamble.
+
+## How to choose among five forms
+
+Not every task is worth splitting, and not every split is the same. This table arranges five forms across “how much parallelism” and “how much coordination” to help you locate one quickly before work begins.
+
+| Form | What it is | Best for | Cost | When it is not suitable |
+| --- | --- | --- | --- | --- |
+| Single Agent | One Claude Code session completes work sequentially | Short tasks, strong dependencies, high shared state; you can watch it finish | No coordination overhead, but context grows on long tasks | Side work would pollute main context; independent modules need parallel work |
+| subagent | An auxiliary Agent delegated within one session; it has separate context, tools, and permissions, but reports only a summary to the main session | Side tasks such as code search, log analysis, and adversarial review that read many files but need only a conclusion | Lower token cost; result is compressed back to main context | Workers need to message one another or share a task list |
+| agent team | Multiple independent Claude Code sessions with shared task list and messaging; you can converse directly with a teammate | Parallel development of new modules/features, multi-angle research, competing-hypothesis debugging | Significantly higher token cost; coordination grows with teammates; **currently experimental**, requiring `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | Sequential tasks, same-file edits, long dependency chains—official guidance says a single session or subagents suit these better |
+| worktree session | An independent checkout on an independent branch, running Claude Code in different terminal windows | You need genuinely isolated writes and branches and are willing to coordinate merge manually, like Git feature branches | Merge is normal Git work, not automatic | You need automatic task/message coordination or do not want manual merge |
+| Independent reviewer | A fresh-context read-only review of diff and acceptance criteria, without letting the writer self-grade | You need a second opinion; writers easily favor code they just wrote | An extra session or subagent | Change is too small to justify it; reviewers asked to find gaps can overreport |
+
+:::caution[Agent Teams are currently experimental]
+Agent teams are disabled by default and require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` in settings.json or the environment. Known limitations include: in-process teammates do not support `/resume`; task state can lag; shutdown can be slow; each session may have only one team; and teammates cannot nest additional teams. Before use, check the Limitations section of the official agent-teams page.
+:::
+
+The core decision is not “can it run in parallel?” but “is the coordination cost after parallelization lower than the waiting cost of doing it sequentially?” If tasks share substantial state or the latter depends on the former's conclusion, splitting only adds coordination cost; one session working through it is better.
+
+### The difference between a subagent and an agent team
+
+The official documentation offers a direct distinction:
+
+> Unlike subagents, which run within a single session and can only report back to the main agent, you can also interact with individual teammates directly without going through the lead.
+
+More concretely:
+
+| Dimension | subagent | agent team |
+| --- | --- | --- |
+| Context | Separate context; result reports to caller | Separate context; a fully independent Claude Code session |
+| Communication | Reports only to the main Agent | Teammates can message one another directly |
+| Coordination | Main Agent controls all work | Shared task list; teammates can claim work themselves |
+| Best for | Focused tasks that only need to return a result | Complex work needing discussion, collaboration, and autonomous coordination |
+| Token cost | Lower: result is compressed back to main context | Higher: each teammate is an independent Claude instance |
+
+A simple rule: if you need only one worker to return one answer, use a subagent. If you need several workers to discuss, challenge one another, or each own a part and report to both you and one another, use an agent team.
+
+## Showcase: order-report-pipeline
+
+The following zero-dependency repository turns the preceding principles into runnable code. It consists of three parts:
+
+1. **A frozen contract** (`order-summary.schema.json`): parser output and renderer input must both conform to this JSON Schema. Either side that wants to change a field must unfreeze the contract and notify the other.
+2. **Two non-overlapping workers**: Worker A owns only `src/parse-orders.mjs` (CSV → summary object), and Worker B owns only `src/render-summary.mjs` (summary object → Markdown). Their write sets are pairwise disjoint.
+3. **A merge gate** (`merge-gate.mjs`): before changes are applied, it mechanically checks four criteria.
+
+```text
+order-report-pipeline/
+├── contract/order-summary.schema.json   # frozen interface
+├── src/parse-orders.mjs                 # owned exclusively by Worker A
+├── src/render-summary.mjs               # owned exclusively by Worker B
+├── tasks/task-a-parser.json             # task card A
+├── tasks/task-b-renderer.json           # task card B
+├── tasks/task-c-bad-contract.json       # negative case one: declares a contract change
+├── tasks/task-d-renderer-unfrozen.json  # negative case two: interface is not frozen
+├── workers/run-worker.mjs               # one worker writes only its owned file in an isolated directory
+├── run-independent-workers.mjs          # starts two processes in parallel; integration accepts their output
+├── merge-gate.mjs                       # pre-merge gate
+├── e2e-test.mjs                         # post-merge end-to-end acceptance
+└── results/                             # frozen measured output and exit codes
+```
+
+### Positive case: non-overlapping write sets → gate approves → end-to-end PASS
+
+The two write sets are `src/parse-orders.mjs` and `src/render-summary.mjs`, with no overlap. This is not merely writing “independent” on a task card: `run-independent-workers.mjs` starts two Node child processes at the same time and assigns them different system temporary directories. Each process writes only its owned file, runs a self-test, and reports an output SHA. The coordinator then loads artifacts from the two temporary directories for integration acceptance, instead of using the repository's final source directly.
+
+```bash
+node run-independent-workers.mjs
+# Key output:
+# parallel_processes=2
+# worker-a: owned_file=src/parse-orders.mjs / unexpected_files=none / self_test=PASS
+# worker-b: owned_file=src/render-summary.mjs / unexpected_files=none / self_test=PASS
+# integration_inputs=worker-a-output+worker-b-output
+# integration_from_worker_outputs=PASS
+# RESULT PASS
+# Exit code: 0
+```
+
+After the two worker artifacts pass audit, the merge gate inspects task cards, then a frozen candidate in the repository runs end-to-end regression:
+
+```bash
+# Pre-merge gate
+node merge-gate.mjs tasks/task-a-parser.json tasks/task-b-renderer.json
+# Output:
+# write sets are pairwise disjoint
+# no task touches the frozen contract
+# contract checksum matches disk
+# all interfaces frozen; dependencies satisfied
+# Decision: APPROVE PARALLEL
+# Exit code: 0
+
+# Post-merge end-to-end acceptance
+node e2e-test.mjs
+# Output: PASS  Pipeline output matches frozen golden
+# Exit code: 0
+```
+
+### Negative case one: two tasks both declare changes to the frozen contract → reject before merge
+
+If a task's write set includes the frozen contract file, the gate must reject before changes are applied rather than discover the conflict after writing to disk.
+
+```bash
+node merge-gate.mjs tasks/task-a-parser.json tasks/task-c-bad-contract.json
+# Output:
+# REJECT  task-c-bad-contract: write set contains frozen contract; unilateral modification prohibited
+# REJECT  write conflict: task-a-parser and task-c-bad-contract both modify src/parse-orders.mjs
+# Decision: REJECT CONFLICT
+# Exit code: 3
+```
+
+### Negative case two: interface not frozen / dependency not satisfied → must be serial
+
+If the renderer's contract is not yet frozen (`interface_frozen: false`), or its parser-task dependency is unfinished, the gate decides SEQUENTIAL. It does not reject the task; it tells you these two tasks cannot run together and must first freeze the interface serially and complete dependencies.
+
+```bash
+node merge-gate.mjs tasks/task-a-parser.json tasks/task-d-renderer-unfrozen.json
+# Output:
+# SEQUENTIAL  task-d-renderer-unfrozen: interface not frozen; cannot run in parallel
+# SEQUENTIAL  task-d-renderer-unfrozen: dependency task-a-parser not satisfied
+# Decision: SEQUENTIAL
+# Exit code: 4
+```
+
+### What this Showcase proves and does not prove
+
+It proves process structure: two independent child processes each produce only one owned file, and the coordinator actually completes integration from their temporary artifacts; write-set ownership, frozen-contract checksum, and exit codes can be mechanically gated; conflict paths are rejected before application, while approved paths undergo end-to-end acceptance after merge.
+
+It does not prove the speed or quality of Claude models or Agent Teams themselves. The scripts run neither Claude nor an Agent Team. The two workers are independent local Node processes, used only to isolate the three verifiable structural layers of file ownership, artifact handoff, and coordination gates. A real Agent Team requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` and is currently experimental; this Showcase neither depends on its availability nor fabricates Agent Team run records.
+
+## The merge gate's four criteria
+
+`merge-gate.mjs` calls no model and performs only four mechanical checks. If any is not met, it rejects with an explicit exit code and never writes to disk:
+
+1. **Write sets are pairwise disjoint.** No two tasks declare modification of the same file. Violation → exit code 3.
+2. **Do not touch the frozen contract.** If any task lists the contract path in its write set → exit code 3. You may **read** the contract but cannot unilaterally **change** it on a parallel branch.
+3. **Contract checksum matches.** The `contract_checksum` declared by each task card must equal the actual SHA-256 of the contract file on disk. If a worker secretly changes the contract, checksums will not match.
+4. **Planning gate.** Any `interface_frozen: false` or unsatisfied declared dependency → exit code 4 (SEQUENTIAL), never pretending it can run in parallel.
+
+These four criteria and exit codes (0/3/4) are conventions of this article's Showcase, not built-in Claude Code features. They turn the preceding abstract principles—non-overlap, frozen interfaces, and satisfied dependencies—into a mechanically checkable skeleton.
+
+![A frozen contract and two non-overlapping Workers each modify only their own files; merge is approved after write-set and checksum checks. Conflict paths are rejected at the gate.](/images/articles/multi-agent-collaboration/merge-gate-flow.svg)
+*Caption: The upper half is the positive path: after freezing the contract, two workers change separate files, pass all four gate checks, and the post-merge end-to-end test passes. The lower half is the conflict path: a task write set includes the frozen contract, so the gate rejects it with exit code 3 before disk writes.*
+
+Note two points when reading this diagram. First, the workers' write-set boxes contain no overlapping file—that is the necessary and sufficient condition for parallelism. Second, arrows point from the contract down to workers (workers read it), but no worker arrow points into it (workers do not modify it). Once any worker's write set contains the contract, it takes the conflict path and is rejected.
+
+## Map this process to real Claude Code sessions
+
+The Showcase uses independent local processes as workers because it needs only validate the coordination skeleton. In real use, you can replace workers with any of the following forms:
+
+**Two subagents make non-overlapping module changes.** In the main session, freeze the contract, define both write sets, then delegate two subagents to modify their separate files. They work in their own contexts and report results. After the main session receives them, first run the merge gate on write sets and contract checksum, then run end-to-end tests.
+
+**Two worktree sessions develop in parallel on independent branches.** Open isolated checkouts using `claude --worktree parser-feature` and `claude --worktree renderer-feature`. Each session modifies only its owned files. When done, merge branches through ordinary Git merge; before merge, run the merge gate once to confirm write sets do not conflict.
+
+**Two teammates each own a module in an agent team.** After enabling `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`, have the lead assign parser and renderer as separate tasks to two teammates. Each teammate modifies only its own files. Once complete, the lead accepts with the merge gate, or you may talk directly with a teammate to check progress.
+
+**One writer session plus one independent reviewer subagent.** After the writer makes changes, open a subagent in fresh context to inspect only the diff and acceptance criteria for code review. The reviewer does not know the writer's reasoning process and judges only from the diff and criteria. This avoids the bias of a writer favoring code it just wrote while self-evaluating.
+
+## Common failure modes
+
+### Parallelizing for the sake of parallelism
+
+When tasks have strong dependencies or high shared state, splitting only adds coordination cost. If the two workers you split out must repeatedly align their state, parallelism probably is not worth it—one Agent working through the task is faster and more reliable.
+
+### Starting work before the interface is frozen
+
+Both sides write their own schema, and fields do not match at merge. Freeze field names, types, and formats in a contract first; both sides implement against it. When the contract changes, unfreeze, align, and freeze again before continuing.
+
+### Unclear file ownership
+
+Two Agents both claim they need to change one file. The last disk writer wins and the earlier changes disappear. Define each worker's write set explicitly on task cards and check for overlap before merging.
+
+### Letting the writer accept its own work
+
+Official best practices state plainly that fresh context reduces the bias of writers favoring code they just wrote. If you need confidence in a change, open an independent reviewer—another session or a subagent—and give it only the diff and acceptance criteria, not the writer's reasoning.
+
+### Building a complex multi-Agent system immediately
+
+First let one Agent reliably finish one small task with clear boundaries, then consider splitting. Official agent-teams documentation suggests 3–5 teammates with 5–6 tasks each as a reasonable starting point; beyond that, rising coordination cost is likely to consume parallel benefits.
+
+## Exercise: draw a dependency graph for your next parallel task
+
+Find a task you are about to tackle with multiple Agents and draw a dependency graph with this template:
+
+```yaml
+Task A:
+  write_set: [src/module-a.ts]
+  depends_on: []
+  interface_frozen: true
+
+Task B:
+  write_set: [src/module-b.ts]
+  depends_on: []
+  interface_frozen: true
+
+Shared contract:
+  path: contract/shared-schema.json
+  frozen_checksum: <sha256>
+```
+
+Then ask three questions:
+
+1. Do A and B's write sets overlap? If yes, adjust the division first.
+2. Is the shared contract frozen? If not, freeze it serially first.
+3. Does B depend on A's conclusion? If the dependency is not satisfied, mark it sequential; do not pretend it can run in parallel.
+
+Only after all three pass should you select a form (subagent/worktree/agent team) and start parallel work. When it finishes, run the merge gate, and run end-to-end tests only after the gate approves.
+
+Completion criteria: your dependency graph contains concrete file paths, a concrete contract path, and a checksum; the merge gate approves it with exit code 0.
+
+## Sources and further reading
+
+- [Official sub-agents documentation](https://code.claude.com/docs/en/sub-agents) (primary source: a subagent's separate context/tools/permissions and reporting mechanism)
+- [Official agent-teams documentation](https://code.claude.com/docs/en/agent-teams) (primary source: experimental agent teams, shared task list, direct communication, and same-file overwrite warning)
+- [Official common-workflows documentation](https://code.claude.com/docs/en/common-workflows) (primary source: worktree independent-branch checkouts and subagent delegation patterns)
+- [Official best-practices documentation](https://code.claude.com/docs/en/best-practices) (primary source: Writer/Reviewer pattern and fresh-context bias reduction)
+- [Claude Code Orange Book](https://github.com/alchaincyf/claude-code-orange-book) (secondary Chinese thematic map, CC BY-NC-SA 4.0)
+- [This article's research pack and runnable Showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/multi-agent-collaboration)
+
+Official documentation supports current product behavior, verified on 2026-07-11. The Orange Book is retained as a Chinese thematic map with attribution under CC BY-NC-SA 4.0; this article's structure, argument, and Showcase were independently organized and rechecked. The merge-gate criteria and exit codes are this Showcase's teaching conventions, not built-in Claude Code features or an industry standard.

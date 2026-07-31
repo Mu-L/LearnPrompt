@@ -1,40 +1,65 @@
 ---
 const base = import.meta.env.BASE_URL === "/" ? "" : import.meta.env.BASE_URL.replace(/\/$/, "");
 const withBase = (href: string) => (href.startsWith("/") ? `${base}${href}` : href);
+const chineseHomeUrl = new URL(withBase("/"), Astro.site);
+const englishHomeUrl = new URL(withBase("/en/"), Astro.site);
+const sitemapUrl = new URL(withBase("/sitemap-index.xml"), Astro.site);
+const socialImageUrl = new URL(withBase("/images/wiki-transition-poster-v1.jpg"), Astro.site);
+const organizationUrl = new URL(`${withBase("/")}#organization`, Astro.site);
+const homeSchema = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": organizationUrl.href,
+    name: "LearnPrompt",
+    url: chineseHomeUrl.href,
+    logo: new URL(withBase("/favicon.svg?v=transparent-circle"), Astro.site).href,
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "LearnPrompt",
+    url: chineseHomeUrl.href,
+    inLanguage: "zh-CN",
+    description: "用真实项目学习 AI 编程、Agent、Skills 与知识工作流。",
+    publisher: { "@id": organizationUrl.href },
+  },
+];
+const serializedHomeSchema = JSON.stringify(homeSchema).replaceAll("</", "<\\/");
 
 const paths = [
   {
     index: "01",
     title: "AI 编程入门",
-    href: "/ai-coding/minimum-agentic-coding-workflow/",
+    href: "/ai-coding/",
     body: "先做一个小任务。一张任务卡、一份 diff、一次验收，够你跑完第一轮。",
     meta: "5 篇 · 第一次交付",
   },
   {
     index: "02",
     title: "Claude Code",
-    href: "/claude-code/install-and-first-project/",
+    href: "/claude-code/",
     body: "拿本地项目练手：先学会给规则，再处理长会话、Skills 和多 Agent。",
     meta: "8 篇 · 本地项目",
   },
   {
     index: "03",
     title: "Codex",
-    href: "/codex/codex-form-factors/",
+    href: "/codex/",
     body: "工作要在哪里跑？先选 CLI、IDE、桌面或 Cloud，再谈权限和审查。",
     meta: "6 篇 · 执行与审查",
   },
   {
     index: "04",
     title: "Agent 工程",
-    href: "/agent-engineering/what-is-harness/",
+    href: "/agent-engineering/",
     body: "Agent 总是跑偏，就沿着指令、约束、记忆、反馈和编排一层层查。",
     meta: "6 篇 · Harness",
   },
   {
     index: "05",
     title: "Agent Skills",
-    href: "/agent-skills/what-are-agent-skills/",
+    href: "/agent-skills/",
     body: "同一套流程做了三次，可以考虑写成 Skill。先把触发条件和验收补齐。",
     meta: "7 篇 · 可复用流程",
   },
@@ -48,7 +73,7 @@ const paths = [
   {
     index: "07",
     title: "Obsidian AI",
-    href: "/obsidian-ai/markdown-as-agent-memory/",
+    href: "/obsidian-ai/",
     body: "目录怎么放、索引怎么写、项目怎么交接，都落到 Markdown 和 Git 里。",
     meta: "5 篇 · 知识工作台",
   },
@@ -84,6 +109,25 @@ const mailSubject = encodeURIComponent("想和 LearnPrompt 聊聊");
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LearnPrompt｜把 AI 用进真实项目</title>
     <meta name="description" content="LearnPrompt 用真实项目讲任务拆解、代码交付和知识沉淀，覆盖 Claude Code、Codex、Agent、Skills、Loop 与知识工作台。" />
+    <link rel="canonical" href={chineseHomeUrl} />
+    <link rel="alternate" hreflang="zh-CN" href={chineseHomeUrl} />
+    <link rel="alternate" hreflang="en" href={englishHomeUrl} />
+    <link rel="alternate" hreflang="x-default" href={chineseHomeUrl} />
+    <link rel="sitemap" href={sitemapUrl} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="LearnPrompt" />
+    <meta property="og:title" content="LearnPrompt｜把 AI 用进真实项目" />
+    <meta property="og:description" content="用真实项目学习任务拆解、代码交付、Agent 工作流、Skills 与知识沉淀。" />
+    <meta property="og:url" content={chineseHomeUrl} />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:image" content={socialImageUrl} />
+    <meta property="og:image:alt" content="LearnPrompt AI Practice Wiki" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="LearnPrompt｜把 AI 用进真实项目" />
+    <meta name="twitter:description" content="用真实项目学习任务拆解、代码交付、Agent 工作流、Skills 与知识沉淀。" />
+    <meta name="twitter:image" content={socialImageUrl} />
+    <script type="application/ld+json" set:html={serializedHomeSchema} />
   </head>
   <body>
     <main class="lp-site">
@@ -93,6 +137,7 @@ const mailSubject = encodeURIComponent("想和 LearnPrompt 聊聊");
           <small>AI Practice Wiki</small>
         </a>
         <div class="lp-nav-links">
+          <a href={withBase("/en/")} lang="en">EN</a>
           <a href={withBase("/start-here/")}>开始</a>
           <a href="#paths">路径</a>
           <a href="#guides">精选</a>
@@ -133,7 +178,7 @@ const mailSubject = encodeURIComponent("想和 LearnPrompt 聊聊");
       <section class="lp-metrics" aria-label="教程质量证据">
         <div>
           <span>01</span>
-          <strong>41 篇教程</strong>
+          <strong>47 篇教程</strong>
           <p>每篇都有来源、教学图、Showcase 和独立审稿。</p>
         </div>
         <div>
@@ -155,7 +200,7 @@ const mailSubject = encodeURIComponent("想和 LearnPrompt 聊聊");
 
       <section id="paths" class="lp-section lp-paths">
         <div class="lp-section-head">
-          <p>8 Tracks · 41 Verified Tutorials</p>
+          <p>8 Tracks · 47 Verified Tutorials</p>
           <h2 class="lp-heading-lines">
             <span>你现在卡在哪，</span>
             <span>就从哪一页开始。</span>

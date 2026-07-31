@@ -1,0 +1,232 @@
+---
+title: "Skill Trigger Rules and Directory Structure: Turn False Positives and False Negatives into Measurable Problems"
+description: "Use a trigger test matrix, directory layering, and a broad vs bounded experiment design to give Skills verifiable boundaries, and understand when metadata, the body, and resources load."
+sidebar:
+  order: 3
+difficulty: intermediate
+source_repo: alchaincyf/agent-skills-orange-book
+source_url: https://github.com/alchaincyf/agent-skills-orange-book
+updated_from: "2026-07"
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-12"
+reading_time: 15 minutes
+research_path: research/articles/trigger-rules-and-structure
+showcase_path: research/articles/trigger-rules-and-structure/showcase/skill-router-lab
+showcase_status: verified
+quality_score: 93
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Intermediate | 15 minutes | 2026-07-12 | LearnPrompt Editorial Team |
+
+You wrote “use when processing update digests” for a release-weekly Skill. It then eagerly takes the stage for “help me polish a release note,” yet fails to react to “organize updates from three versions and produce this week’s Chinese changelog digest.” Many people assume this is an occasional model glitch. The real problem is usually more engineering-oriented: you have not expressed the trigger boundary as testable routing, nor made the directory structure support progressive disclosure.
+
+This article does not repeat the basic constraints for `name`/`description`, the minimal template, or packaging steps; those are already covered in “How to Write Your First SKILL.md.” This article focuses only on five things that are more likely to go wrong on your second Skill: false positives, false negatives, neighboring conflicts, the difference between explicit and implicit invocation, and the loading layer for metadata, the body, references, scripts, and assets.
+
+## What You Will Be Able to Do After Reading
+
+You will get three directly reusable things:
+
+1. A trigger test matrix of positive cases / neighboring negative cases / unrelated negative cases, so you no longer rely on “I feel the description is written well enough.”
+2. A directory layering approach: `SKILL.md` handles only discovery and routing, complete input contracts and boundaries go in `references/`, deterministic steps go in `scripts/`, and templates go in `assets/`.
+3. A debugging sequence: first distinguish a routing problem from a body problem, then decide whether to change the `description`, change the directory, or disable implicit invocation.
+
+![The request first enters metadata routing, which decides whether to load the SKILL.md body; it then reads references, scripts, and assets as needed. The right side compares false positives and false negatives with confusion matrices for broad and bounded.](/images/articles/trigger-rules-and-structure/skill-routing-progressive-disclosure.svg)
+*Caption: metadata decides “whether the body is worth reading,” while the body then decides “which resources to read”; if you put every boundary in the body, the routing stage cannot see them at all. Below is the real matrix from this run: both broad and bounded achieved 2 TP / 0 FP / 0 FN / 2 TN, so this run did not verify that “broad necessarily raises FP.”*
+
+## First Break Down the Problem: Triggering Is a Routing Decision, Not “Whether It Will Be Used”
+
+Invoking a Skill is not fundamentally an abstract question of “how smart the model is”; it is a routing question:
+
+- Should this request hit a particular Skill?
+- If it should hit one, which Skill is the better match?
+- After it hits, do the body and resources actually load?
+
+Break the problem apart and you can see different failures:
+
+| Symptom | Actual failure | What to change |
+| --- | --- | --- |
+| A Skill takes over unrelated work | false positive; boundary too broad | Narrow the metadata first and add neighboring exclusions |
+| It does not trigger when it clearly should | false negative; boundary too narrow or listing truncated | First change the first half of `description` and its synonymous wording |
+| `/skill-name` works, but automatic triggering does not | The body is fine; routing failed | Do not change `Workflow` first; check metadata first |
+| It triggers automatically, but later output lacks template or script behavior | The resource index or body call chain has a problem | Check paths from `SKILL.md` to `references/` / `scripts/` / `assets/` |
+
+This is why “explicit invocation succeeds” and “implicit matching is accurate” must be tested separately. The former proves that the body and resources are usable; only the latter proves that your discovery boundary is reliable. Combining them into one metric makes you think automatic routing works too when `/skill-name` succeeds.
+
+## Mechanism: Metadata, the Body, and Resources Are Not Seen at the Same Time
+
+The open Agent Skills specification defines only a minimal structure: a directory has at least `SKILL.md`, while optional `scripts/`, `references/`, and `assets/` are added as needed; the agent loads progressively, first reading metadata, then the body after triggering, and finally resources when needed. In other words, what the routing stage sees first is frontmatter, not the refined boundary explanation hidden deep in the body.
+
+At the client layer, however, implementations have already diverged, so you cannot write that “all Skills work this way” as a pseudo-standard:
+
+| Surface | Current implementation | Key point in this article |
+| --- | --- | --- |
+| Open specification | `SKILL.md` + optional `scripts/`, `references/`, `assets/`; metadata loads first, the body loads after triggering, and resources load on demand | The specification does not require `examples/` to be a mandatory directory |
+| Codex | Scans `.agents/skills` from the current working directory upward through the repository; you can explicitly use `$skill` or implicitly match by `description`; the initial skills listing occupies at most 2% of context, has an 8,000-character cap when context size is unknown, descriptions are truncated first, and some skills may be omitted in extreme cases | Put your keywords first; do not bury critical exclusion conditions at the end of a long paragraph |
+| Claude Code | The project Skill directory is `.claude/skills`; you can explicitly invoke with `/<name>`, and it also automatically matches by Skill description; names and descriptions enter the listing first, and the listing is truncated by budget; `disable-model-invocation: true` can retain a Skill for explicit invocation only | Automatic matching and manual invocation are two independent paths |
+
+The easiest trap here is mistaking “the body is comprehensive” for “routing will naturally be accurate.” It will not. Codex’s official documentation directly lists “task matches `description`” as an implicit triggering condition, and advises placing core use cases and trigger words first because the description may be truncated. Claude Code’s official documentation also includes Skill descriptions in each turn’s context and states clearly that if descriptions are ambiguous or overlapping, Claude may load the wrong Skill or miss one it should have used.
+
+One layer further down, directory structure begins to serve loading order rather than “looking complete”:
+
+```text
+release-weekly/
+  SKILL.md
+  references/
+    input-contract.md
+    neighbor-boundaries.md
+  scripts/
+    render-weekly-digest.mjs
+  assets/
+    changelog-template.md
+```
+
+- `SKILL.md` contains only discovery metadata, the core workflow, and the resource index, keeping both the routing layer and the body layer short and clear.
+- `references/` contains complete input contracts, neighboring boundaries, and rejection conditions, because this content has value only after the Skill has already decided to load.
+- `scripts/` contains deterministic actions, such as structured rendering, validation, and formatting.
+- `assets/` contains templates and static output resources.
+
+If you put complete boundary contracts, dozens of examples, full template text, and script instructions back into `SKILL.md`, you do not get a “stronger Skill”; you get a routing entry that is more likely to be truncated and harder to debug.
+
+## How to Test Trigger Boundaries: Start with Fixed Positive Cases, Neighboring Negative Cases, and Unrelated Negative Cases
+
+You cannot prove a trigger boundary with a single prompt. To test it, you must first design a fixed set of requests and keep every other condition unchanged between broad and bounded versions. This article’s Showcase fixes four implicit requests, then adds one explicit-invocation control separately:
+
+| ID | Request | Should it trigger? | What does it test? |
+| --- | --- | --- | --- |
+| 1 | Summarize a set of GitHub release notes into a Chinese release weekly report | Should trigger | Clear positive case |
+| 2 | Organize updates from three versions and produce this week’s Chinese changelog digest | Should trigger | Positive case with synonymous phrasing |
+| 3 | Proofread the wording of one release note; do not generate a weekly report | Should not trigger | Neighboring negative case: same domain but not the same task |
+| 4 | Turn meeting minutes into a team weekly report | Should not trigger | Unrelated negative case: lexically similar but a different object |
+| 5 | Explicitly invoke `release-weekly`, then provide a positive-case request | Should trigger | Proves that “forced invocation succeeds” does not equal “implicit matching is accurate” |
+
+The judgment criterion used here is deliberately mechanical: only when the final output contains the canary `SKILL_USED: release-weekly` in the body does the Skill body count as actually loaded. Merely seeing output that looks like a weekly report is not enough, because the model can improvise without reading the Skill.
+
+At this point, the difference between broad and bounded must become a table, not an adjective:
+
+| Version | `description` design | Expected advantage | Expected cost |
+| --- | --- | --- | --- |
+| broad | Deliberately blends releases, updates, notes, and weekly reporting into one vague description | More likely to hit positive cases | Likely to incorrectly include neighboring negative cases and unrelated weekly reports |
+| bounded | Puts the core use case of “multi-version release notes / changelog digest” first, and explicitly excludes “single-item wording review” and “general team weekly reports” | Lower false positives | If wording is too narrow, it may also miss paraphrased positive cases |
+
+The real evaluation metrics are not “which wording is smarter,” but:
+
+- What are broad’s TP / FP / FN / TN respectively?
+- Does bounded reduce FP without sacrificing TP?
+- If bounded instead introduces FN, are the keywords too narrow, or was the listing truncated?
+
+## Showcase: Nine Real Invocations Completed, but Broad Did Not Produce More False Positives in This Run
+
+The frozen Showcase for this article is named `skill-router-lab`. The research package submitted two isolated fixture repos, four fixed requests, shared ground truth, a result schema, a privacy scan, and a deterministic evaluator; all are located in [`research/articles/trigger-rules-and-structure/showcase/skill-router-lab`](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/articles/trigger-rules-and-structure/showcase/skill-router-lab).
+
+The writer sandbox’s nested preflight encountered a read-only state DB, app-server permissions, and DNS blocking in sequence, so the writer did not fabricate a matrix. The controller then kept the fixture, requests, ground truth, and evaluator unchanged in the outer layer and reran with fixed `gpt-5.5`: four fresh ephemeral runs for broad, four fresh ephemeral runs for bounded, plus one bounded explicit control group, for nine independent invocations in total.
+
+The final results are as follows:
+
+| Variant / mode | TP | FP | FN | TN | precision | recall | Result |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| broad / implicit | 2 | 0 | 0 | 2 | 1.00 | 1.00 | The two positive cases had the canary; the two negative cases did not |
+| bounded / implicit | 2 | 0 | 0 | 2 | 1.00 | 1.00 | Same as broad |
+| bounded / explicit | — | — | — | — | — | — | `request-5` loaded=true, exit 0 |
+
+This result did not support the design hypothesis that “broad necessarily produces more FP in this round.” The rigorous conclusion is not to rerun the experiment until the desired numbers appear, but to acknowledge that across these four requests, the same Skill body, the same client version, and one fresh run / case, the two versions performed identically. Narrowing the description still has a reasonable mechanistic basis, but estimating a stable difference requires a larger neighboring corpus, repeated trials, and different listing pressure.
+
+The explicit control group also proves another point: `$release-weekly` can force-load the body and output the canary, so if an implicit positive case fails to trigger in the future, investigate metadata routing first rather than suspecting the body and resource chain. The evaluator also rejected malformed-result negative cases, and the privacy scan passed. The production process remained `partial` at first, then a new independent read-only reviewer completed final review; it was upgraded to `verified` only after 0/0/0 findings and 93/100.
+
+## Why Directory Layering Should Serve Loading Rather Than “Looking Complete”
+
+Once you accept that “routing sees metadata first, and the body sees resources later,” directory design is no longer an aesthetic question; it is a loading question.
+
+### What `SKILL.md` Should Contain
+
+- `name` / `description`: responsible only for discovery and first-round matching.
+- A very short `Use` / `Workflow`: tells the model what to do first after a match.
+- A resource index: points subsequent deep reading to `references/`, `scripts/`, and `assets/`.
+
+### What `references/` Should Contain
+
+- A complete input contract: what counts as “multi-version release notes,” and what does not.
+- Neighboring boundaries: why single-item wording review, general team weekly reports, meeting minutes, and so on should not match.
+- If there are multiple clients, place differentiated constraints here rather than cramming them into the description.
+
+### What `scripts/` Should Contain
+
+- Formatting or validation steps that can be run mechanically.
+- A deterministic evaluator, privacy scan, and result archiver.
+- Any part where “execution correctness” matters more than “language description.”
+
+### What `assets/` Should Contain
+
+- Weekly-report templates, fixed paragraph skeletons, and table skeletons.
+- Static data, schemas, and boilerplate files.
+
+`examples/`, by contrast, should not be written as a universally required directory. The open specification lists only `scripts/`, `references/`, and `assets/` as common optional directories, while allowing additional directories; different clients also extend their own fields in frontmatter or external metadata files. Elevating `examples/` into a standard that “every Skill must have” only causes a tutorial to mistake client conventions for the specification.
+
+## Debugging Sequence: First Decide Whether Routing Is Broken or the Body Is Broken
+
+Many people change `Workflow` immediately, but the order is wrong. A more reliable debugging sequence is:
+
+1. Run explicit invocation first.
+If `/$skill-name` or `$skill-name` succeeds and the output contains the canary, the body and resource chain are intact, and the problem is concentrated in routing.
+
+2. Then check whether metadata is actually visible.
+Codex’s official documentation explicitly says that descriptions may be shortened or omitted; Claude Code’s official documentation also says that listings truncate descriptions. If core use cases and exclusion conditions are buried in the latter half, there is no guarantee they enter the list visible to the model.
+
+3. Neighboring negative cases must be tested separately.
+A request like “proofread the wording of one release note” is more valuable than completely unrelated meeting minutes because it is closer to a real false positive.
+
+4. Check frontmatter and listing form.
+Claude Code’s documentation specifically calls out a common pitfall: if YAML frontmatter is broken, `/skill-name` can still run, but metadata is empty and Claude has no description to match. Continuing to polish the body is pointless at that point.
+
+5. Change the body and resource directories only last.
+Only when explicit invocation also fails, or the canary does not appear, does that indicate a problem with the body itself, path references, or the script call chain.
+
+:::caution[Do Not Conflate Two Problems]
+“A Skill can run but routes inaccurately” and “the Skill’s own workflow is poorly written” are two kinds of bugs. For the former, change metadata and the test matrix first; for the latter, change the body and resources.
+:::
+
+## When to Disable Implicit Invocation
+
+Implicit invocation is not more advanced by default; it is merely more convenient by default. In the following situations, it is more appropriate to return a Skill to explicit invocation:
+
+- High-risk actions: publishing, deletion, sending external messages, or changing production configuration. Here you want determinism, not “the model will usually judge correctly.”
+- Especially many neighboring conflicts: for example, “write a weekly report,” “polish a release note,” and “organize meeting minutes” all happen in the same team context.
+- Your core keywords are very short and easily shared by other Skills: for example, review, summary, report, sync.
+- The team has installed many Skills, the listing budget is frequently exhausted, and descriptions have begun to be truncated.
+
+The current clients do not use the same field to disable it either:
+
+- Codex: in `agents/openai.yaml`, set `allow_implicit_invocation` to `false` while retaining explicit `$skill`.
+- Claude Code: `disable-model-invocation: true` removes the Skill from automatic matching while retaining explicit `/<name>`.
+
+Both of these are client extensions, not unified fields in the open specification. A tutorial must clearly label “who supports what”; do not write a client implementation as a cross-product standard.
+
+## Exercise: Turn Your Next Skill into a Boundary Experiment First
+
+Choose a Skill you have already written but that frequently misfires. Do not change the body first; complete the following four steps first:
+
+1. Write one broad description and one bounded description, changing metadata only and not the body.
+2. Fix 2 positive cases, 1 neighboring negative case, and 1 unrelated negative case.
+3. Put a canary in the body and make clear what counts as “the body really loaded.”
+4. Use a confusion matrix to inspect broad and bounded TP / FP / FN / TN rather than only seeing “I think the second version is more precise.”
+
+Observable completion criteria:
+
+- You can state clearly which request is a false positive and which is a false negative.
+- You can identify whether the problem is in metadata, the body, or the resource index.
+- You can explain why implicit invocation should be disabled or retained.
+
+## Sources and Further Reading
+
+- [Agent Skills Specification](https://agentskills.io/specification) (open specification; directory structure, frontmatter, progressive disclosure)
+- [Build skills | ChatGPT Learn](https://learn.chatgpt.com/docs/build-skills) (official OpenAI documentation; Codex’s `.agents/skills` path, explicit `$` and implicit `description` matching, skills-listing budget, `openai.yaml` extensions)
+- [Customization | ChatGPT Learn](https://learn.chatgpt.com/docs/customization/overview) (official OpenAI documentation; layers for Skills, AGENTS.md, memories, MCP, and subagents in Codex)
+- [Slash commands / skills | Claude Code Docs](https://code.claude.com/docs/en/slash-commands) (official Anthropic documentation; trigger debugging, `/skill-name` can still run when frontmatter is broken, listing truncation, and `disable-model-invocation`)
+- [Features overview | Claude Code Docs](https://code.claude.com/docs/en/features-overview) (official Anthropic documentation; `/<name>`, automatic matching, on-demand loading, `disable-model-invocation: true`)
+- [Agent Skills overview | Claude Platform Docs](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) (official Anthropic documentation; `name` / `description` should state both what a Skill does and when to use it)
+- [Agent Skills Orange Book Topic Map](https://github.com/alchaincyf/agent-skills-orange-book)
+- The two Chinese Orange Book topic maps outside the task-provided worktree (read-only, used for topic mapping and not as publicly distributable material)
+
+Official materials are used to verify current product behavior and client differences. The Orange Book is used only as a Chinese topic map and source of negative-case material: its claim about “keyword matching priority” cannot be treated as a fact about current client algorithms, and the repository does not provide a standard open-source license. This article therefore retains only a link and a limitation statement, and does not reproduce its screenshots, images, or extended passages.

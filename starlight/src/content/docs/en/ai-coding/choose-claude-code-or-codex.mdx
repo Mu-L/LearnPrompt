@@ -1,0 +1,263 @@
+---
+title: "How to Choose Between Claude Code and Codex: Compare Work Styles, Not Models"
+description: Use one real tutorial rewrite, five decision variables, and four task modes to choose Claude Code, Codex, or a two-tool workflow.
+sidebar:
+  order: 1
+difficulty: beginner
+source_repo: alchaincyf/codex-orange-book
+source_url: https://github.com/alchaincyf/codex-orange-book
+updated_from: 2026-07
+author: LearnPrompt Editorial Team
+verified_at: "2026-07-10"
+reading_time: 12 minutes
+research_path: research/golden-samples/claude-code-or-codex
+showcase_path: research/golden-samples/claude-code-or-codex/showcase
+showcase_status: verified
+quality_score: 92
+legacy_status: current
+---
+
+| Difficulty | Reading time | Last verified | Author |
+| --- | --- | --- | --- |
+| Beginner | 12 minutes | 2026-07-10 | LearnPrompt Editorial Team |
+
+You have a tutorial of only 30 lines, with one requirement: “Make it more practical.” Should you hand the task straight to an agent, or first stay present to clarify the audience, examples, template, and acceptance criteria?
+
+Starting from the same commit and target file, we ran two real routes: Claude Code first performed read-only discovery while an editor answered key questions; Codex received the complete frozen task card and completed the rewrite and build in one delegation. What matters is not who wrote a few more lines, but **at what requirement maturity you need to stay present, and when you can step away.**
+
+> When choosing a coding agent, choose the work style before the tool; write acceptance before discussing models.
+
+## What you will be able to do
+
+You will get three things you can use immediately:
+
+1. A five-question decision method independent of product popularity.
+2. A real rewrite record for Claude Code’s in-the-moment discovery and Codex’s full delegation.
+3. Four common task modes and a safe boundary for two-tool collaboration.
+
+![Route between Claude Code and Codex workflows according to task maturity, environment dependence, and feedback cadence](/images/articles/choose-claude-code-or-codex/workflow-routing.svg)
+*Caption: Tool choice begins with task state: while direction is still unclear, keep a person in the loop to explore; once goals, boundaries, and acceptance are frozen, move to asynchronous delegation and independent acceptance.*
+
+:::note[This is not a model benchmark]
+This experiment fixed the baseline commit, target file, and final acceptance, while deliberately not fixing input maturity: Claude first received a vague direction, whereas Codex later received a frozen task card. Models, prompts, permissions, and Harnesses also differed. It shows how two workflows unfold; it cannot prove that either model is generally faster or smarter.
+:::
+
+## First separate three concepts that are often mixed together
+
+### Model: decides the next step
+
+A model reads context, proposes plans, and generates code. Model versions change, and the same tool may switch models. Therefore “I use Codex” or “I use Claude Code” does not yet describe the full operating conditions.
+
+### Tool: connects the model to the real environment
+
+Tools determine whether a model can read files, run commands, edit code, call a browser, or create an isolated workspace. Claude Code no longer runs only in a terminal: the official product also provides IDE, desktop, and browser entry points. Codex likewise has a local CLI, apps, and cloud tasks.
+
+Therefore, “Claude Code means local and Codex means cloud” is an outdated binary.
+
+### Work style: determines how you delegate and accept work
+
+The durable distinctions are: must you stay present? Does the task depend on the local environment? Can it be written as a deliverable with clear boundaries? Who takes over after failure?
+
+Those are the units this article compares.
+
+## Choose with five questions
+
+Do not ask for a tool name first. Take the task and answer the following five questions one by one.
+
+| Question | When the left side is stronger | When the right side is stronger |
+| --- | --- | --- |
+| Feedback cadence: must it ask while working, or can you inspect only after delivery? | Interactive local session | Background or asynchronous task |
+| Environment dependence: does it rely on local services, login state, or uncommitted files? | Keep it local and authorize cautiously | It can enter an isolated or cloud environment |
+| Task boundary: do you learn what to change only while exploring, or is there already a clear issue? | Explore first, then narrow scope | Delegate a directly reviewable slice |
+| Risk radius: which files, accounts, and external systems can an error touch? | Frequent human confirmation | Sandboxing, approvals, and mechanical constraints |
+| Acceptance: do you judge results by eye, or are there tests, builds, or a reviewer? | Keep synchronous feedback | Suitable for asynchronous execution and independent review |
+
+These five questions do not automatically output one product name, but they produce the right **execution surface**. Then check which current Claude Code or Codex entry point carries that surface more conveniently.
+
+## Four task modes
+
+### 1. Continuous exploration in an unfamiliar repository
+
+You do not yet know where the entry point is, requirements change as you read, and you need to correct the agent at any time. Prioritize the local interactive entry point you know best. Claude Code is well suited to this paired style; Codex CLI can work locally too. The key is not to disguise exploration as an already-clear issue.
+
+Recommended rhythm: read-only scan → hypotheses → human confirms the smallest slice → change → immediately run the fastest check.
+
+### 2. An implementation task with clear boundaries
+
+Input files, forbidden scope, completion conditions, and acceptance commands are all known. This kind of task suits a background or isolated environment where you inspect the diff later. Codex cloud is one direct vehicle; Claude Code’s background agent, worktree, or another isolated approach can also carry it.
+
+Success does not depend on the word “background,” but on whether the handoff includes:
+
+- The goal and what is not being done;
+- Allowed paths to modify;
+- The acceptance command;
+- Evidence that must remain after failure;
+- Stop and escalation conditions.
+
+### 3. A high-risk local task
+
+The task touches `.env`, browser login state, a local database, or publishing. Do not open all permissions by default just because it needs local context. Claude Code has permission rules and multiple permission modes; Codex CLI has an approval policy and sandbox. Both should follow the same principle: **minimal permissions by default, separate approval for high-risk actions**.
+
+If the result cannot be undone—sending a message, deleting cloud data, or publishing content—human confirmation should be part of the workflow, not a final “be careful” in the prompt.
+
+### 4. Independent code review
+
+An implementer has already produced a diff, and a second role needs only to find risks, check acceptance, and identify omissions. Codex CLI provides a clear review path; Claude Code can also act as a reviewer with read-only or plan permissions. Role isolation matters most here: the reviewer should not inherit the implementer’s assumption that “I already got it right.”
+
+## Showcase: turn a vague request into a buildable tutorial
+
+This time, instead of a task like “read an unfamiliar repository,” which hardly separates work styles, we chose a real short LearnPrompt tutorial:
+
+```text
+starlight/src/content/docs/ai-coding/project-checklist.mdx
+```
+
+The original had only about 30 lines. Its initial editorial direction was deliberately real and vague:
+
+```text
+Make this short checklist more practical so that beginners can follow it directly after reading.
+```
+
+Both tools started from commit `038bcd5`, worked in isolated worktrees, and had the same final acceptance: modify only this MDX and make `cd starlight && npm run build` exit with 0.
+
+### Claude Code route: clarify the requirement first
+
+The first round was forbidden from changing files; Claude Code could only read the target page and a few adjacent tutorials. Rather than writing immediately, it identified three content gaps:
+
+1. There were only abstract nouns, with no copyable template.
+2. “Acceptance” and “rollback” had no concrete actions.
+3. The only example was disconnected from the operational steps.
+
+It then raised four questions that would genuinely change the finished work:
+
+| Decision needed | Why the agent must not guess |
+| --- | --- |
+| Whether to provide a copyable project card | Determines whether the article is a principles explanation or a hands-on tutorial |
+| Whether it addresses new projects or existing repositories | The two contexts have different risk orderings |
+| Whether to use LearnPrompt or a vacuum example | Determines evidence strength and the explanation of transferability |
+| Whether to divide work with adjacent tutorials | Determines what should be explained and what should be linked |
+
+After one editor response, the task was frozen: target beginners taking over an existing repository; include a five-minute startup table, YAML project card, before/after, credential caution, Starlight migration case, exercise, and acceptance checklist; do not repeat adjacent tutorials.
+
+That is the first value of the interactive route: **its output is not more words, but four editorial decisions that must not be guessed.**
+
+### Continuous collaboration failed in real ways too
+
+After the brief was frozen, Claude Code did not complete the work smoothly in one go:
+
+| Attempt | Result | Problem exposed |
+| --- | --- | --- |
+| Resume the discovery session | Manually stopped after about 342 seconds, with no diff | The session remained in tool-use for a long time |
+| Normal execution retry | 12 turns exhausted, with no diff | A global `claude-mem` plugin tried to call an MCP tool outside the allowlist |
+| `--safe-mode` + Read/Edit | 12 turns exhausted, with no diff | After removing the plugin, the tool path was still too broad |
+| `--safe-mode` + Read/Write | Completed in 51 seconds and 3 turns | One read and a full-file write made the path determinate |
+
+In the end it modified only one MDX, with a `+96/-18` diff. The first build then reused the main workspace’s `node_modules` from a temporary worktree and triggered Astro absolute-path cache conflicts; after running `npm ci` in the isolated directory, the rebuild generated all 48 pages.
+
+There is no need to polish away these failures. They show that local continuous collaboration lets you stay present to make decisions, and also means you are responsible for plugins, sessions, tool permissions, and the dependency environment.
+
+### Codex route: one delegation with a frozen task card
+
+Codex did not receive the initial “make it more practical.” It received the complete handoff formed by Claude’s discovery:
+
+```yaml
+target: starlight/src/content/docs/ai-coding/project-checklist.mdx
+scope: modify only one MDX; preserve frontmatter, URLs, and existing source information
+required_sections:
+  - five-minute startup table
+  - YAML project card
+  - before/after
+  - credentials and publishing caution
+  - Starlight migration case
+  - new-project differences, exercise, acceptance checklist
+verify: cd starlight && npm run build
+deliver: changed files, structure, build result, uncertainties
+```
+
+In one `exec` delegation it read the target and adjacent tutorials, edited one MDX, ran the build, and delivered the result. The final diff was `+192/-18`; all 48 pages built successfully; it did not ask the editor for clarification during execution.
+
+### Now the choice is visible
+
+| Observation | Claude Code: in-the-moment exploration | Codex: full delegation |
+| --- | --- | --- |
+| Initial input | Vague direction; do not write yet | Frozen goal, boundaries, and acceptance |
+| First valuable artifact | Three gaps and four editorial questions | A reviewable single-file diff |
+| Human intervention | Answer direction questions and handle execution failures | No clarification needed during execution |
+| Acceptance responsibility | Outer Harness runs after environment correction | Agent runs it within the same delegation |
+| Final scope | 1 MDX; build passes | 1 MDX; build passes |
+
+If the requirement is still “make it better,” you need in-the-moment exploration. Staying present is not waste; it is product decision-making. If the goal, forbidden areas, structure, and acceptance can already be written as a task card, full delegation is easier: you can leave for a while and return to inspect the diff and build result.
+
+:::caution[This still is not a Claude-versus-Codex capability benchmark]
+The two routes used different prompts, models, tool permissions, and local Harnesses; Codex also benefited from Claude’s frozen brief from the first round. Therefore `+96` and `+192` cannot judge writing quality, and timing cannot judge model speed. This experiment proves only that different requirement maturity calls for different collaboration styles.
+:::
+
+The frozen brief, key commands, failure overview, both actual drafts, diff statistics, and build results are kept in the [new Workflow Showcase](https://github.com/LearnPrompt/LearnPrompt/tree/main/research/golden-samples/claude-code-or-codex/showcase/workflow-comparison). The older read-only repository-diagnosis record remains supplementary material but no longer supports the selection conclusion.
+
+## Two-tool collaboration: split by role, not brand
+
+The most reliable combination is usually not “Claude writes frontend, Codex writes backend,” but roles with verifiable interfaces:
+
+```text
+Explorer: read the repository only; produce task boundaries, relevant paths, risks, and acceptance commands
+    ↓ structured handoff
+Implementer: modify only allowed paths, run the fastest check, deliver diff and logs
+    ↓ independent acceptance
+Reviewer: do not inherit the implementer’s conclusion; read only the diff, test results, and original requirement
+```
+
+Claude Code, Codex, a human, or deterministic scripts can each take these roles. Do not let two agents modify the same set of files in one working tree at the same time; parallel work belongs in isolated branches, worktrees, or tasks with non-overlapping boundaries.
+
+## A copyable selection prompt
+
+Give the following to either tool first, without allowing it to change files immediately:
+
+```text
+Analyze this task read-only first; do not modify files. Answer:
+
+1. Does the task depend on local services, login state, or uncommitted state?
+2. Which inputs and acceptance conditions are already clear, and which still need exploration?
+3. What are the minimal permissions? Which actions require human approval?
+4. Which paths are in the smallest deliverable slice?
+5. What is the first fastest acceptance command?
+6. Is this better suited to synchronous pairing, asynchronous delegation, or one implementer plus one reviewer? Why?
+```
+
+## When to use neither for now
+
+- You cannot explain what task success is and only want the agent to “try it first.”
+- The repository has no runnable checks and the change touches a high-risk external system.
+- The working directory has no version control or backup, so failure cannot be recovered.
+- The task includes secrets but you have not set permission and logging boundaries.
+- You are about to let multiple agents modify the same files without an isolated workspace.
+
+First establish task definition, version control, and acceptance; that is more effective than changing tools.
+
+## Exercise: make a delegation card for your task
+
+Choose a real task and write the following in no more than ten lines:
+
+```yaml
+goal: what to deliver
+environment: local / isolated worktree / cloud
+allowed_paths: what may be modified
+forbidden_actions: what must not be done
+first_check: the first acceptance command
+human_gate: which step requires human confirmation
+reviewer: who accepts it independently
+```
+
+If you still cannot write three of these fields, you have a task-definition problem first, not a Claude Code versus Codex selection problem.
+
+## Sources and further reading
+
+- [Claude Code overview](https://code.claude.com/docs/en/overview)
+- [Claude Code permissions](https://code.claude.com/docs/en/permissions)
+- [Claude Code agents](https://code.claude.com/docs/en/agents)
+- [OpenAI Codex CLI](https://developers.openai.com/codex/cli)
+- [OpenAI Codex cloud](https://developers.openai.com/codex/cloud)
+- [OpenAI: Harness engineering](https://openai.com/index/harness-engineering/)
+- [Claude Code Orange Book](https://github.com/alchaincyf/claude-code-orange-book)
+- [Codex Orange Book](https://github.com/alchaincyf/codex-orange-book)
+
+The Claude Code and Codex Orange Books use [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). This article identifies them as Chinese secondary topic maps, retains their sources and licenses, and reorganizes their structure, argument, and Showcase. Facts about current product behavior are based on official documentation and the local CLI checked on 2026-07-10.
