@@ -174,6 +174,20 @@ export default defineConfig({
         { label: "Loop Engineering", items: [{ autogenerate: { directory: "loop-engineering" } }] },
         { label: "Obsidian AI", items: [{ autogenerate: { directory: "obsidian-ai" } }] },
         { label: "Hermes / OpenClaw", items: [{ autogenerate: { directory: "agent-frameworks" } }] },
+        {
+          label: "多智能体模拟",
+          translations: { en: "Multi-Agent Simulations" },
+          items: [{ autogenerate: { directory: "llm-agents" } }],
+        },
+        {
+          label: "Stable Diffusion",
+          items: [{ autogenerate: { directory: "stable-diffusion" } }],
+        },
+        {
+          label: "提示工程与可靠性",
+          translations: { en: "Prompting & Reliability" },
+          items: [{ autogenerate: { directory: "prompt-engineering" } }],
+        },
       ],
       head: [
         {

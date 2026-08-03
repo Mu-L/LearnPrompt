@@ -1,0 +1,62 @@
+---
+title: "Stable Diffusion Prompt Syntax: Turn Natural Language into a Testable Generation Recipe"
+description: Build Stable Diffusion Prompts from subject, setting, style, constraints, and parameters; understand tool-specific weight syntax and tune through small experiments rather than folklore.
+sidebar:
+  order: 2
+difficulty: beginner
+source_repo: AUTOMATIC1111/stable-diffusion-webui
+source_url: https://github.com/AUTOMATIC1111/stable-diffusion-webui
+updated_from: "2026-08"
+author: LearnPrompt Editorial Team
+verified_at: "2026-08-03"
+reading_time: 10 minutes
+legacy_status: current
+---
+
+| Component | Question to answer | Change you can inspect |
+| --- | --- | --- |
+| Subject | What is most important in the image? | Whether the subject is replaced or missing |
+| Setting | Where is it and what is it doing? | Whether composition and action remain stable |
+| Style | Which visual language presents it? | Whether light, material, or medium changes |
+| Constraint | What should not appear? | Whether it reduces a known failure mode |
+
+Stable Diffusion Prompting is not a magic grammar shared by every interface, model, and extension. A more reliable model is a testable input recipe: text encoders, the model, sampler, and workflow jointly determine the result.
+
+## Start with a comparable recipe
+
+Begin with one structured line instead of piling on every word you can think of. Change one variable per run so you know what actually influenced the result.
+
+```text
+subject, action or setting, visual medium and style, lighting and composition, necessary constraints
+```
+
+For example, fix the subject and resolution first, then test “soft side light” against “hard top light.” If you change the model, seed, sampler, and ten words at once, you get inspiration rather than a conclusion.
+
+## Weights and parentheses: inspect the tool before using numbers
+
+| Syntax you see | What it may mean | Correct action |
+| --- | --- | --- |
+| `(term)` | Some interfaces increase emphasis on that term | Read the attention/emphasis documentation for the current interface |
+| `(term:1.2)` | Some interfaces support explicit weight | Verify with one baseline image and one changed variant |
+| `[term]` | Some interfaces reduce emphasis | Do not assume every workflow parses it identically |
+| negative prompt | Attempts to reduce unwanted traits | Record which failure it addresses |
+
+These forms are common in some WebUIs, but they are not a universal Stable Diffusion language. Node-based workflows, different text encoders, or custom nodes may use another input and weighting rule. If syntax has no effect, inspect the parser and node before adding more parentheses.
+
+## Replace a “universal Prompt” with an experiment table
+
+1. Freeze the model, resolution, seed, and workflow and generate a baseline image.
+2. Change only one of subject, setting, style, or constraint per run.
+3. Label both what improved and what side effect appeared.
+4. Retain only words or structures that remain useful across several seeds.
+
+The Prompt templates accumulated this way are transferable methods, not overfitting to one accidental image.
+
+## Prompt and deployment are the same reproducibility problem
+
+A Prompt cannot be saved independently of its model and environment. First use [Stable Diffusion Installation and Deployment: Choose a Workflow Before a Reproducible Local Run](/en/stable-diffusion/installation/) to record the runtime, then save input, model, and output so another person can reproduce your conclusion.
+
+## Further reading
+
+- [AUTOMATIC1111 Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
+- [WebUI Features](https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features)

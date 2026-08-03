@@ -1,0 +1,64 @@
+---
+title: Stable Diffusion 安装与部署：先选工作流，再做一次可复现的本地运行
+description: 用硬件、隐私、控制需求和维护成本选择 Stable Diffusion 工作流；完成一次可复现安装并保留模型、参数和错误证据。
+sidebar:
+  order: 1
+difficulty: beginner
+source_repo: AUTOMATIC1111/stable-diffusion-webui
+source_url: https://github.com/AUTOMATIC1111/stable-diffusion-webui
+updated_from: "2026-08"
+author: LearnPrompt 编辑部
+verified_at: "2026-08-03"
+reading_time: 11 分钟
+legacy_status: current
+---
+
+| 你的约束 | 更合适的起点 | 第一条验收标准 |
+| --- | --- | --- |
+| 有本地 GPU，想离线控制模型与文件 | 本地 WebUI 或节点式工作流 | 在本机生成并保存一张带参数的图 |
+| 想最快试用，不维护驱动与环境 | 可信云端服务 | 导出任务、模型与生成参数 |
+| 需要可重复的复杂流程 | 节点式工作流与版本化 workflow | 用同一 workflow 重跑并定位差异 |
+| 需要 API 接入产品 | 有稳定 API contract 的服务或自托管端点 | 用最小请求得到可验证响应 |
+
+“怎么安装 Stable Diffusion”没有一条长期正确的命令。显卡、驱动、Python、模型格式和界面项目都会变化；正确的起点是先固定你要承担的维护边界，再跟随所选项目的官方安装文档。
+
+## 先决定部署边界
+
+本地部署的优势是文件与队列在自己手里，代价是你要维护环境、模型存储和升级兼容性。云端的优势是上手快，代价是数据、排队、计费和可复现性要依赖服务方。无论选哪条路，都不要把“能打开页面”当作安装完成。
+
+## 安装前的四项检查
+
+| 检查项 | 要记录什么 | 为什么重要 |
+| --- | --- | --- |
+| 硬件与系统 | GPU/内存、操作系统、磁盘空间 | 决定可选后端和模型体积 |
+| 工具版本 | WebUI、运行时、驱动或容器版本 | 让后续错误可以定位 |
+| 模型来源 | 下载页、许可、文件 hash | 避免不明模型与无法重现 |
+| 输出位置 | 模型、图片、workflow、日志目录 | 防止升级或清理时丢失证据 |
+
+官方项目会按平台给出不同入口。以 WebUI 为例，应从项目 README 或 wiki 选择对应系统的指南；不要复用旧整合包、过时网盘链接或陌生的一键脚本。
+
+## 一次最小的可复现运行
+
+先使用项目官方示例或一个来源明确的基础模型，只生成一张图。保存 prompt、negative prompt（如果工具支持）、seed、采样器、步数、分辨率、模型名和工作流文件。
+
+```text
+环境版本 + 模型标识 + 输入参数 + 输出文件 + 错误日志 = 可复现的最小运行记录
+```
+
+这样你遇到黑图、显存不足或结果漂移时，才能先区分是环境、模型还是参数的问题，而不是盲目重装。
+
+## 常见失败怎样缩小范围
+
+1. 启动失败：先读取当前项目的官方安装说明，核对运行时与驱动，不要混用多份教程的依赖命令。
+2. 模型不出现：检查模型目录、文件格式、许可与项目支持范围，再看启动日志。
+3. 生成失败或显存不足：先缩小分辨率和批量，再记录实际错误；不要把“低显存模式”当成万能修复。
+4. 结果不可复现：比对模型、seed、工作流、采样设置和插件版本，而不是只复制自然语言描述。
+
+## 下一步：把参数写成可交流的 Prompt
+
+安装完成后，继续读 [Stable Diffusion Prompt 语法：把自然语言变成可测试的生成配方](/stable-diffusion/sd-prompt-syntax/)。它不会替代具体工具的文档，但能帮你把每次尝试变成可比较的输入。
+
+## 延伸阅读
+
+- [AUTOMATIC1111 Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
+- [官方安装与运行指引](https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Install-and-Run-on-NVidia-GPUs)

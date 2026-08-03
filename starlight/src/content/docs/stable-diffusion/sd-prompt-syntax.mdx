@@ -1,0 +1,62 @@
+---
+title: Stable Diffusion Prompt 语法：把自然语言变成可测试的生成配方
+description: 用主体、场景、风格、约束和参数构造 Stable Diffusion Prompt；理解权重语法的工具差异，并用小实验而非玄学调参。
+sidebar:
+  order: 2
+difficulty: beginner
+source_repo: AUTOMATIC1111/stable-diffusion-webui
+source_url: https://github.com/AUTOMATIC1111/stable-diffusion-webui
+updated_from: "2026-08"
+author: LearnPrompt 编辑部
+verified_at: "2026-08-03"
+reading_time: 10 分钟
+legacy_status: current
+---
+
+| 组成 | 要回答的问题 | 可检查的变化 |
+| --- | --- | --- |
+| 主体 | 画面里最重要的对象是什么？ | 主体是否被替换或遗漏 |
+| 场景 | 它在何处、做什么？ | 构图与动作是否稳定 |
+| 风格 | 用什么视觉语言呈现？ | 光线、材质、媒介是否改变 |
+| 约束 | 哪些元素不应出现？ | 是否减少了已知失败模式 |
+
+Stable Diffusion Prompt 不是一套跨所有界面、模型和插件都相同的魔法语法。更可靠的理解方式是：它是一份可实验的输入配方；文本编码器、模型、采样器和工作流共同决定结果。
+
+## 从可比较的配方开始
+
+先用一行结构化描述，而不是把所有想到的词堆在一起。每次只改变一个变量，才知道哪一项真正影响结果。
+
+```text
+主体，动作或场景，视觉媒介与风格，光线与构图，必要约束
+```
+
+例如，先固定主体和分辨率，再测试“柔和侧光”与“强硬顶光”的差异。若一次同时更换模型、seed、采样器和十个词，得到的只能是灵感，不能是结论。
+
+## 权重与括号：先看工具，再写数值
+
+| 你看到的写法 | 它可能表示什么 | 正确做法 |
+| --- | --- | --- |
+| `(term)` | 某些界面会提高该词的强调程度 | 查看当前界面的 attention/emphasis 文档 |
+| `(term:1.2)` | 某些界面支持显式权重 | 用一张基线图和一个改动版本验证 |
+| `[term]` | 某些界面会降低强调程度 | 不要假定所有工作流都同样解析 |
+| negative prompt | 试图减少不想要的特征 | 记录它解决的是哪一种失败 |
+
+这些写法常见于某些 WebUI，但并非 Stable Diffusion 的通用语言。节点式工作流、不同文本编码器或自定义节点可能有另一套输入和权重规则；如果语法没有效果，先检查 parser 和节点，而不是继续加括号。
+
+## 用一张实验表替代“万能 Prompt”
+
+1. 冻结模型、分辨率、seed 和工作流，生成基线图。
+2. 一次只改主体、场景、风格或约束中的一项。
+3. 给结果标注“改善了什么”和“带来了什么副作用”。
+4. 只保留在多个 seed 下仍有价值的词或结构。
+
+这样积累下来的 Prompt 模板是可迁移的方法，而不是对某一张偶然图片的过拟合。
+
+## Prompt 与部署是同一个复现问题
+
+Prompt 不能脱离模型和环境单独保存。先按[Stable Diffusion 安装与部署：先选工作流，再做一次可复现的本地运行](/stable-diffusion/installation/)记录运行环境，再保存输入、模型和输出，才能让别人复现你的判断。
+
+## 延伸阅读
+
+- [AUTOMATIC1111 Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
+- [WebUI Features](https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features)

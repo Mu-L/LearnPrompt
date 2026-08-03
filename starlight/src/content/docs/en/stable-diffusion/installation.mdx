@@ -1,0 +1,64 @@
+---
+title: "Stable Diffusion Installation and Deployment: Choose a Workflow Before a Reproducible Local Run"
+description: Choose a Stable Diffusion workflow through hardware, privacy, control, and maintenance constraints; then complete one reproducible run with models, parameters, and error evidence.
+sidebar:
+  order: 1
+difficulty: beginner
+source_repo: AUTOMATIC1111/stable-diffusion-webui
+source_url: https://github.com/AUTOMATIC1111/stable-diffusion-webui
+updated_from: "2026-08"
+author: LearnPrompt Editorial Team
+verified_at: "2026-08-03"
+reading_time: 11 minutes
+legacy_status: current
+---
+
+| Your constraint | Better starting point | First acceptance criterion |
+| --- | --- | --- |
+| You have a local GPU and need control over models and files | A local WebUI or node-based workflow | Generate and save one image locally with its parameters |
+| You want the fastest trial without driver or environment maintenance | A trusted cloud service | Export the job, model, and generation parameters |
+| You need a repeatable complex pipeline | A node-based workflow and versioned workflow file | Replay the same workflow and locate a difference |
+| You need an API in a product | A stable API contract from a service or self-hosted endpoint | Get a verifiable response from a minimal request |
+
+There is no single installation command that stays correct for Stable Diffusion. GPUs, drivers, Python, model formats, and interface projects all change. Start by fixing the maintenance boundary you are willing to own, then follow the official installation guide for the project you choose.
+
+## Decide the deployment boundary first
+
+Local deployment keeps files and queues under your control, but you maintain the environment, model storage, and upgrade compatibility. Cloud deployment starts faster, but data, queueing, billing, and reproducibility depend on the provider. In either path, “the page opens” is not a completed installation.
+
+## Four checks before installation
+
+| Check | What to record | Why it matters |
+| --- | --- | --- |
+| Hardware and OS | GPU/RAM, operating system, disk space | Determines viable backends and model sizes |
+| Tool versions | WebUI, runtime, driver, or container version | Makes later errors diagnosable |
+| Model source | Download page, license, file hash | Avoids unknown models and irreproducible inputs |
+| Output locations | Model, image, workflow, and log folders | Prevents evidence loss during upgrades or cleanup |
+
+Official projects offer different entry points by platform. For a WebUI, choose the guide for your system from its README or wiki; do not reuse a stale bundle, an old file-sharing link, or an unfamiliar one-click script.
+
+## One minimal reproducible run
+
+Begin with an official example or a base model from a clear source and generate only one image. Save the prompt, negative prompt when supported, seed, sampler, steps, resolution, model name, and workflow file.
+
+```text
+environment version + model identity + input parameters + output file + error log = a minimal reproducible run record
+```
+
+When you later see a black image, out-of-memory error, or result drift, this lets you distinguish environment, model, and parameter problems before reinstalling blindly.
+
+## Narrow common failures
+
+1. Startup failure: read the current project’s official installation guide and compare runtime and drivers; do not mix dependency commands from several tutorials.
+2. Model does not appear: check model directory, format, license, and project support before reading the startup log.
+3. Generation fails or exhausts memory: reduce resolution and batch first, then retain the real error; low-memory mode is not a universal repair.
+4. Results are not reproducible: compare model, seed, workflow, sampler settings, and plugin version instead of copying only natural-language text.
+
+## Next: turn parameters into a shareable Prompt
+
+After installation, continue with [Stable Diffusion Prompt Syntax: Turn Natural Language into a Testable Generation Recipe](/en/stable-diffusion/sd-prompt-syntax/). It does not replace the documentation for a specific tool, but it helps turn each attempt into comparable input.
+
+## Further reading
+
+- [AUTOMATIC1111 Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
+- [Official installation and running guide](https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Install-and-Run-on-NVidia-GPUs)
