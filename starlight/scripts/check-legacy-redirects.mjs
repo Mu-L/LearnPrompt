@@ -8,7 +8,50 @@ const vercelConfig = JSON.parse(
   await readFile(join(repositoryDirectory, "vercel.json"), "utf8")
 );
 
-const expectedRedirects = [
+const canonicalRedirects = [
+  {
+    source: "/zh-Hans/docs/llm-agents/ai-town/",
+    destination: "/llm-agents/ai-town/",
+    statusCode: 301,
+  },
+  {
+    source: "/zh-Hans/docs/llm-agents/ai-town",
+    destination: "/llm-agents/ai-town/",
+    statusCode: 301,
+  },
+  {
+    source: "/zh-Hans/docs/stable-diffusion/installation/",
+    destination: "/stable-diffusion/installation/",
+    statusCode: 301,
+  },
+  {
+    source: "/zh-Hans/docs/stable-diffusion/installation",
+    destination: "/stable-diffusion/installation/",
+    statusCode: 301,
+  },
+  {
+    source: "/docs/stable-diffusion/sd-prompt-syntax/",
+    destination: "/stable-diffusion/sd-prompt-syntax/",
+    statusCode: 301,
+  },
+  {
+    source: "/docs/stable-diffusion/sd-prompt-syntax",
+    destination: "/stable-diffusion/sd-prompt-syntax/",
+    statusCode: 301,
+  },
+  {
+    source: "/zh-Hans/docs/prompt-engineering/reducing-gpt-hallucinations/",
+    destination: "/prompt-engineering/reducing-gpt-hallucinations/",
+    statusCode: 301,
+  },
+  {
+    source: "/zh-Hans/docs/prompt-engineering/reducing-gpt-hallucinations",
+    destination: "/prompt-engineering/reducing-gpt-hallucinations/",
+    statusCode: 301,
+  },
+];
+
+const archiveRedirects = [
   {
     source: "/zh-Hans/docs/:path*/",
     destination: "https://v1.learnprompt.pro/zh-Hans/docs/:path*/",
@@ -31,6 +74,8 @@ const expectedRedirects = [
   },
 ];
 
+const expectedRedirects = [...canonicalRedirects, ...archiveRedirects];
+
 for (const expected of expectedRedirects) {
   const actual = (vercelConfig.redirects || []).find(
     (redirect) => redirect.source === expected.source
@@ -44,27 +89,44 @@ for (const expected of expectedRedirects) {
   }
 }
 
-const legacyPathnames = [
-  "/zh-Hans/docs/llm-agents/ai-town/",
-  "/zh-Hans/docs/stable-diffusion/installation/",
-  "/docs/stable-diffusion/sd-prompt-syntax/",
-  "/zh-Hans/docs/prompt-engineering/reducing-gpt-hallucinations/",
+const legacyCanonicalPairs = [
+  ["/zh-Hans/docs/llm-agents/ai-town/", "/llm-agents/ai-town/"],
+  ["/zh-Hans/docs/stable-diffusion/installation/", "/stable-diffusion/installation/"],
+  ["/docs/stable-diffusion/sd-prompt-syntax/", "/stable-diffusion/sd-prompt-syntax/"],
+  [
+    "/zh-Hans/docs/prompt-engineering/reducing-gpt-hallucinations/",
+    "/prompt-engineering/reducing-gpt-hallucinations/",
+  ],
 ];
 
-for (const pathname of legacyPathnames) {
-  const expectedPrefix = pathname.startsWith("/zh-Hans/docs/")
-    ? "/zh-Hans/docs/"
-    : "/docs/";
-  const redirect = expectedRedirects.find(
-    (item) => item.source === `${expectedPrefix}:path*/`
+for (const [source, destination] of legacyCanonicalPairs) {
+  const redirect = (vercelConfig.redirects || []).find(
+    (item) => item.source === source
   );
-  const preservedPath = pathname.slice(expectedPrefix.length, -1);
-  const destination = redirect.destination.replace(
-    ":path*",
-    preservedPath
+  if (!redirect || redirect.destination !== destination) {
+    throw new Error(`Legacy topic does not redirect to its canonical page: ${source}`);
+  }
+  const archiveSource = source.startsWith("/zh-Hans/docs/")
+    ? "/zh-Hans/docs/:path*/"
+    : "/docs/:path*/";
+  if (
+    (vercelConfig.redirects || []).findIndex((item) => item.source === source) >=
+    (vercelConfig.redirects || []).findIndex(
+      (item) => item.source === archiveSource
+    )
+  ) {
+    throw new Error(
+      `Canonical redirect must precede archive fallback for ${source}`
+    );
+  }
+}
+
+for (const archive of archiveRedirects) {
+  const actual = (vercelConfig.redirects || []).find(
+    (item) => item.source === archive.source
   );
-  if (destination !== `https://v1.learnprompt.pro${pathname}`) {
-    throw new Error(`Legacy path does not preserve its content path: ${pathname}`);
+  if (!actual || actual.destination !== archive.destination) {
+    throw new Error(`Archive fallback changed: ${archive.source}`);
   }
 }
 
