@@ -10,8 +10,18 @@ const vercelConfig = JSON.parse(
 
 const expectedRedirects = [
   {
+    source: "/zh-Hans/docs/:path*/",
+    destination: "https://v1.learnprompt.pro/zh-Hans/docs/:path*/",
+    statusCode: 301,
+  },
+  {
     source: "/zh-Hans/docs/:path*",
     destination: "https://v1.learnprompt.pro/zh-Hans/docs/:path*",
+    statusCode: 301,
+  },
+  {
+    source: "/docs/:path*/",
+    destination: "https://v1.learnprompt.pro/docs/:path*/",
     statusCode: 301,
   },
   {
@@ -45,12 +55,13 @@ for (const pathname of legacyPathnames) {
   const expectedPrefix = pathname.startsWith("/zh-Hans/docs/")
     ? "/zh-Hans/docs/"
     : "/docs/";
-  const redirect = expectedRedirects.find((item) =>
-    item.source.startsWith(expectedPrefix)
+  const redirect = expectedRedirects.find(
+    (item) => item.source === `${expectedPrefix}:path*/`
   );
+  const preservedPath = pathname.slice(expectedPrefix.length, -1);
   const destination = redirect.destination.replace(
     ":path*",
-    pathname.slice(expectedPrefix.length)
+    preservedPath
   );
   if (destination !== `https://v1.learnprompt.pro${pathname}`) {
     throw new Error(`Legacy path does not preserve its content path: ${pathname}`);
