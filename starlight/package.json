@@ -8,6 +8,7 @@
     "build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
     "build:pages": "DEPLOY_TARGET=github-pages ASTRO_TELEMETRY_DISABLED=1 astro build",
     "check:i18n": "node scripts/check-i18n-slice.mjs",
+    "check:legacy-redirects": "node scripts/check-legacy-redirects.mjs",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview"
   },
   "dependencies": {
