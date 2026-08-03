@@ -1,0 +1,65 @@
+---
+title: AI Town 与多智能体模拟：从热闹演示到可验证系统
+description: 从 AI Town 的搜索意图出发，理解多智能体模拟的记忆、环境、调度、观察与评估，并做出一个可复跑的最小切片。
+sidebar:
+  order: 1
+difficulty: intermediate
+source_repo: a16z-infra/ai-town
+source_url: https://arxiv.org/abs/2304.03442
+updated_from: "2026-08"
+author: LearnPrompt 编辑部
+verified_at: "2026-08-03"
+reading_time: 12 分钟
+legacy_status: current
+---
+
+| 适合谁 | 读完能得到什么 | 先别做什么 |
+| --- | --- | --- |
+| 想理解 AI Town 的开发者 | 一张可实施的模拟系统拆分图 | 不要先堆几十个角色和一个大地图 |
+| 在做多 Agent 产品的人 | 可观察、可回放的最小实验切片 | 不要把角色对话当作评估结论 |
+| 想复现旧教程的人 | 旧关键词对应的新学习路径 | 不要把 2023 年的 demo 当成当下能力证明 |
+
+AI Town 之所以持续被搜索，不是因为“让一群 Agent 聊天”本身多新鲜，而是它把抽象的 Agent 概念变成了可见的环境、角色、记忆和涌现行为。今天更值得复用的不是某个 demo 的画面，而是把系统做成**可观察、可复跑、可否证**的实验。
+
+## 旧的 AI Town 搜索意图，今天如何回答
+
+经典的 Generative Agents 工作把 Agent 的经验记录、反思和检索接入规划；开源的 AI Town starter kit 则把共享状态、事务和模拟引擎放进可部署的应用底座。它们解释了“虚拟小镇”为何吸引人，却不自动证明多 Agent 系统可靠。
+
+当你搜索 AI Town，真正要回答的通常是三件事：角色为什么会采取某个行动、环境如何约束行动、以及一次看似涌现的结果能否再次出现。
+
+## 不要把“会聊天”误认成“可验证”
+
+| 层 | 最小职责 | 应留下的证据 |
+| --- | --- | --- |
+| 角色状态 | 目标、已知事实、短期记忆 | 可检查的 state snapshot |
+| 环境 | 地点、时间、资源、允许动作 | 可版本化的 world rules |
+| 调度 | 谁在何时观察、规划、行动 | event log 与执行顺序 |
+| 评估 | 成功条件、反例、成本与失败 | 可重跑的 test case |
+
+没有这四层，屏幕上的对话更接近一次即兴表演。尤其不要以“角色说自己完成了任务”作为成功信号；成功应由环境状态或独立检查器判定。
+
+## 一个最小可复跑切片
+
+先只放两个角色、一处共享资源和一个可验证目标，例如“在 10 个时间步内协调一次会议”。每次运行都冻结模型、system prompt、初始状态、工具权限和随机种子（若运行环境支持）。
+
+```text
+observe state → retrieve relevant memory → propose action → validate action → append event
+```
+
+把每一步写进 event log。第二次运行时，不要只看故事是否更有趣；比较目标是否完成、是否违反规则、花了多少 token，以及失败是否能够解释。
+
+## 让模拟产出可用 evidence
+
+1. 把每个角色的可见信息和不可见信息分开，避免“全知角色”掩盖设计缺陷。
+2. 为环境动作设置确定的 schema 与拒绝路径，不能执行的动作必须留下原因。
+3. 用对照组检查：关闭记忆、关闭反思或改变调度后，结果怎样变化？
+4. 把“看起来像涌现”改写为可度量命题，例如任务完成率、冲突率、预算和重跑差异。
+
+## 与 LearnPrompt 的关系
+
+AI Town 是一个很好的入口，但真正的工程问题会落在[编排层](/agent-engineering/orchestration-layer/)的状态、角色和验收，以及[OpenClaw 架构指南](/agent-frameworks/openclaw-architecture-guide/)里的控制面与执行面边界。把模拟当作实验系统，而不是演示视频，才值得继续扩展角色数量。
+
+## 延伸阅读
+
+- [Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/abs/2304.03442)
+- [a16z-infra/ai-town](https://github.com/a16z-infra/ai-town)

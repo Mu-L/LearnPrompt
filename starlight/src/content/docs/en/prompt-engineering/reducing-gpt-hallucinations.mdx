@@ -1,0 +1,62 @@
+---
+title: "How to Reduce LLM Hallucinations: Turn Plausible Answers into a Verifiable Workflow"
+description: Reduce LLM hallucinations with task boundaries, controlled context, structured output, tool verification, and failure handling; separate model expression from system reliability.
+sidebar:
+  order: 1
+difficulty: intermediate
+source_url: https://arxiv.org/abs/2311.05232
+updated_from: "2026-08"
+author: LearnPrompt Editorial Team
+verified_at: "2026-08-03"
+reading_time: 12 minutes
+legacy_status: current
+---
+
+| Risk scenario | Signal not to rely on | More reliable alternative |
+| --- | --- | --- |
+| Factual Q&A | Confident language and complete paragraphs | Traceable sources and citation checks |
+| Code and configuration | A command that looks plausible | Execution, tests, and real output |
+| Data extraction | Free-form summary | Schema validation and missing-field handling |
+| High-impact decisions | One model conclusion | Human review, rules, and escalation paths |
+
+“Hallucination” often describes model output that looks plausible but is not bound to evidence. The goal is not to make a model incapable of error. It is to make the system stop, expose uncertainty, and hand work to the next check when evidence is insufficient, an action cannot execute, or verification fails.
+
+## Write the task boundary first
+
+Models readily fill in nonexistent detail for a vague request. State the input, allowed sources, output format, and refusal condition so “guess a complete answer” becomes “complete a task within bounded evidence.”
+
+```text
+Answer only from the supplied material; return unknown when evidence is missing; list source identifiers; output must satisfy the supplied schema.
+```
+
+This does not guarantee truth, but it makes unverified parts visible. For more on freezing a task, see [Turn a Natural-Language Request into an Acceptable Task](/en/start-here/context-task-verification/).
+
+## Five reliability control points
+
+| Control point | What to do | What to do on failure |
+| --- | --- | --- |
+| Sources | Give the model controlled, locatable context | Mark material missing; do not invent a completion |
+| Format | Constrain fields and types with a schema | Retry or refuse after validation failure |
+| Tools | Send queryable or executable facts through tools | Retain the error; do not pretend success |
+| Verification | Check critical conclusions with independent rules or tests | Return to input or escalate to a person |
+| Records | Save input version, evidence, and result | Make the issue reproducible and repairable |
+
+Keeping these layers separate matters: retrieval can add context but cannot replace verification; structured output can catch malformed data but cannot prove that a field is factually correct.
+
+## Do not request hidden reasoning traces
+
+Reliability comes from inspectable evidence, results, and validators, not from demanding long private reasoning traces. For complex work, ask for a concise conclusion, source identifiers, an executable next step, and uncertainty items, then verify them with tools or people.
+
+## Put failure into the feedback loop
+
+1. Mark model output as a proposal rather than a fact written automatically.
+2. Define handling for each failure: missing material, malformed output, tool error, and verification failure.
+3. Retain human approval for high-impact actions, especially publishing, deletion, payments, and permission changes.
+4. Turn a verified repair into a test or rule instead of leaving it as a one-time conversation reminder.
+
+That is the value of the [feedback layer](/en/agent-engineering/feedback-loop/): one failure should become a verifiable change in the next loop, not a repeated hallucination.
+
+## Further reading
+
+- [A Survey on Hallucination in Large Language Models](https://arxiv.org/abs/2311.05232)
+- [OpenAI Structured Outputs](https://platform.openai.com/docs/guides/structured-outputs)

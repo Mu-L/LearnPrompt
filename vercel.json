@@ -5,6 +5,46 @@
   "outputDirectory": "starlight/dist",
   "redirects": [
     {
+      "source": "/zh-Hans/docs/llm-agents/ai-town/",
+      "destination": "/llm-agents/ai-town/",
+      "statusCode": 301
+    },
+    {
+      "source": "/zh-Hans/docs/llm-agents/ai-town",
+      "destination": "/llm-agents/ai-town/",
+      "statusCode": 301
+    },
+    {
+      "source": "/zh-Hans/docs/stable-diffusion/installation/",
+      "destination": "/stable-diffusion/installation/",
+      "statusCode": 301
+    },
+    {
+      "source": "/zh-Hans/docs/stable-diffusion/installation",
+      "destination": "/stable-diffusion/installation/",
+      "statusCode": 301
+    },
+    {
+      "source": "/docs/stable-diffusion/sd-prompt-syntax/",
+      "destination": "/stable-diffusion/sd-prompt-syntax/",
+      "statusCode": 301
+    },
+    {
+      "source": "/docs/stable-diffusion/sd-prompt-syntax",
+      "destination": "/stable-diffusion/sd-prompt-syntax/",
+      "statusCode": 301
+    },
+    {
+      "source": "/zh-Hans/docs/prompt-engineering/reducing-gpt-hallucinations/",
+      "destination": "/prompt-engineering/reducing-gpt-hallucinations/",
+      "statusCode": 301
+    },
+    {
+      "source": "/zh-Hans/docs/prompt-engineering/reducing-gpt-hallucinations",
+      "destination": "/prompt-engineering/reducing-gpt-hallucinations/",
+      "statusCode": 301
+    },
+    {
       "source": "/zh-Hans/docs/:path*/",
       "destination": "https://v1.learnprompt.pro/zh-Hans/docs/:path*/",
       "statusCode": 301

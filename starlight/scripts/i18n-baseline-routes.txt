@@ -41,6 +41,7 @@
 ./codex/sandbox-and-permissions/index.html
 ./index.html
 ./loop-engineering/five-moves/index.html
+./llm-agents/ai-town/index.html
 ./obsidian-ai/ai-maintains-knowledge-base/index.html
 ./obsidian-ai/claude-md-index-navigation/index.html
 ./obsidian-ai/markdown-as-agent-memory/index.html
@@ -49,9 +50,12 @@
 ./obsidian-ai/vault-directory-for-ai/index.html
 ./skills/index.html
 ./sources/source-index/index.html
+./stable-diffusion/installation/index.html
+./stable-diffusion/sd-prompt-syntax/index.html
 ./start-here/ai-practice-map/index.html
 ./start-here/context-task-verification/index.html
 ./start-here/how-to-use-this-wiki/index.html
 ./start-here/index.html
 ./start-here/setup-safety-basics/index.html
+./prompt-engineering/reducing-gpt-hallucinations/index.html
 ./workshop/index.html

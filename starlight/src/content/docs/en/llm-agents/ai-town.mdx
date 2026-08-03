@@ -1,0 +1,65 @@
+---
+title: "AI Town and Multi-Agent Simulation: From a Lively Demo to a Verifiable System"
+description: Start with the search intent behind AI Town, then break multi-agent simulation into memory, environment, scheduling, observation, and evaluation that can be replayed.
+sidebar:
+  order: 1
+difficulty: intermediate
+source_repo: a16z-infra/ai-town
+source_url: https://arxiv.org/abs/2304.03442
+updated_from: "2026-08"
+author: LearnPrompt Editorial Team
+verified_at: "2026-08-03"
+reading_time: 12 minutes
+legacy_status: current
+---
+
+| Who this is for | What you will get | What not to do first |
+| --- | --- | --- |
+| Developers who want to understand AI Town | An implementable map of a simulation system | Do not start with dozens of characters and a huge map |
+| People building multi-agent products | A minimal, observable, replayable experiment slice | Do not treat character dialogue as evaluation |
+| Readers returning from an old tutorial | A current learning path for legacy keywords | Do not treat a 2023 demo as proof of present capability |
+
+AI Town remains searchable not because “making a group of Agents chat” is inherently novel, but because it made the abstract idea of Agents visible through an environment, characters, memory, and emergent behavior. The reusable lesson today is not a particular demo screen. It is how to make a system **observable, replayable, and falsifiable**.
+
+## How to answer the old AI Town search intent today
+
+The original Generative Agents work connected an Agent’s experience record, reflection, and retrieval to planning. The open-source AI Town starter kit put shared state, transactions, and a simulation engine in a deployable application foundation. They explain why a virtual town is compelling, but they do not automatically prove that a multi-agent system is reliable.
+
+When someone searches for AI Town, the real questions are usually: why did a character take an action, how did the environment constrain it, and can an apparently emergent result happen again?
+
+## Do not mistake “can chat” for “is verifiable”
+
+| Layer | Minimum responsibility | Evidence to retain |
+| --- | --- | --- |
+| Character state | Goals, known facts, short-term memory | Inspectable state snapshot |
+| Environment | Places, time, resources, allowed actions | Versioned world rules |
+| Scheduling | Who observes, plans, and acts when | Event log and execution order |
+| Evaluation | Success criteria, counterexamples, cost, and failure | Replayable test case |
+
+Without these four layers, dialogue on a screen is closer to an improvisation. In particular, do not accept “the character says it finished the task” as a success signal; success should be decided by environment state or an independent checker.
+
+## A minimal replayable slice
+
+Start with only two characters, one shared resource, and one verifiable goal, such as “coordinate one meeting within ten time steps.” For every run, freeze the model, system prompt, initial state, tool permissions, and random seed when the runtime supports it.
+
+```text
+observe state → retrieve relevant memory → propose action → validate action → append event
+```
+
+Write every step to an event log. On the second run, do not ask only whether the story is more entertaining. Compare whether the goal completed, whether rules were violated, the token cost, and whether failure can be explained.
+
+## Make simulation output usable evidence
+
+1. Separate information visible to each character from information it cannot see, so an all-knowing character cannot hide a design flaw.
+2. Give environment actions a deterministic schema and rejection path; impossible actions must retain their reason.
+3. Check a control group: what changes when memory, reflection, or scheduling is removed?
+4. Rewrite “looks emergent” as a measurable claim such as completion rate, conflict rate, budget, or replay variance.
+
+## How this connects to LearnPrompt
+
+AI Town is a useful entry point, but the real engineering questions land in the state, roles, and acceptance rules of the [orchestration layer](/en/agent-engineering/orchestration-layer/) and the control-plane versus execution-plane boundary in the [OpenClaw architecture guide](/en/agent-frameworks/openclaw-architecture-guide/). Treat the simulation as an experiment system, not a demo video, before adding more characters.
+
+## Further reading
+
+- [Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/abs/2304.03442)
+- [a16z-infra/ai-town](https://github.com/a16z-infra/ai-town)
