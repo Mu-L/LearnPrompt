@@ -23,6 +23,8 @@
 ./ai-coding/natural-language-to-mvp/index.html
 ./ai-coding/plan-auto-approval-boundary/index.html
 ./ai-coding/project-checklist/index.html
+./ai-video/capcut-ai-video-workflow/index.html
+./ai-video/zhipu-qingying-ai-video/index.html
 ./claude-code/advanced-conversation-patterns/index.html
 ./claude-code/chrome-extension-prototype/index.html
 ./claude-code/content-automation-pipeline/index.html
