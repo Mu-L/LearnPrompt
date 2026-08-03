@@ -3,6 +3,28 @@
   "installCommand": "cd starlight && npm ci",
   "buildCommand": "cd starlight && npm run build",
   "outputDirectory": "starlight/dist",
+  "redirects": [
+    {
+      "source": "/zh-Hans/docs/:path*/",
+      "destination": "https://v1.learnprompt.pro/zh-Hans/docs/:path*/",
+      "statusCode": 301
+    },
+    {
+      "source": "/zh-Hans/docs/:path*",
+      "destination": "https://v1.learnprompt.pro/zh-Hans/docs/:path*",
+      "statusCode": 301
+    },
+    {
+      "source": "/docs/:path*/",
+      "destination": "https://v1.learnprompt.pro/docs/:path*/",
+      "statusCode": 301
+    },
+    {
+      "source": "/docs/:path*",
+      "destination": "https://v1.learnprompt.pro/docs/:path*",
+      "statusCode": 301
+    }
+  ],
   "headers": [
     {
       "source": "/_astro/(.*)",
