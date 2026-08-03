@@ -1,0 +1,60 @@
+---
+title: "Zhipu Qingying AI Video: Turn One Generation into a Verifiable Shot Workflow"
+description: Use current video-generation APIs, structured prompts, and asynchronous task acceptance to answer the historical Zhipu Qingying search intent with a replayable shot workflow.
+sidebar:
+  order: 2
+difficulty: intermediate
+source_url: https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E8%A7%86%E9%A2%91%E7%94%9F%E6%88%90%E5%BC%82%E6%AD%A5
+updated_from: "2026-08"
+author: LearnPrompt Editorial Team
+verified_at: "2026-08-03"
+reading_time: 12 minutes
+legacy_status: current
+---
+
+| What you are looking for | What to deliver today | What not to mistake it for |
+| --- | --- | --- |
+| Usable Zhipu Qingying capabilities | One video-generation request with a task ID | A screenshot of a historical product |
+| A prompt for text- or image-led video | A replayable shot recipe | An unexplained “cinematic” sentence |
+| An engineering path for batches | A task record that can poll, fail, and download | A successful request meaning a successful video |
+
+“Zhipu Qingying” remains a high-intent query, but a verifiable video-generation workflow is more useful today. Zhipu's current public documentation presents video generation as an asynchronous task with text, image, and first/last-frame inputs; product names, models, and pricing can change, so a tutorial should freeze inputs, task states, and acceptance evidence rather than an old interface screenshot.
+
+## Write the prompt as a shot specification first
+
+Do not begin with “make a cool video.” The official prompt guide separates camera language, framing, light, subject, motion, setting, and atmosphere. That maps directly to a shot specification you can compare.
+
+```text
+camera: tracking, medium shot, slow push in
+subject: one red paper crane
+motion: takes off from a table and flies toward a window
+setting: morning studio with soft side light
+constraint: one continuous action in five seconds, no text or brands
+```
+
+Validate one shot per request. For a 30-second video, accept six shots first, then decide transitions, voiceover, and music in editing. Do not make the model responsible for storyboards, editing, and narrative all at once.
+
+## Asynchronous generation needs three acceptance stages
+
+1. **Submit**: retain model, prompt, image URL or file hash, size, duration, FPS, and `request_id`.
+2. **Poll**: read the video result only after an explicit success status; retain timeout, failure, and content-review reasons with a retry limit.
+3. **Human review**: inspect subject consistency, key action, in-frame text, audio, rights, and the aspect ratio needed by the destination.
+
+## Use a small contract to stop batch work from drifting
+
+| Field | Purpose | Acceptance question |
+| --- | --- | --- |
+| `shot_id` | Align storyboard and output | Which shot does this clip represent? |
+| `input_hash` | Freeze reference image or script version | Can the result be replayed? |
+| `request_id` | Join submission and result lookup | Did we query the same task? |
+| `status` | Separate processing, success, and failure | Do we truly have a playable result? |
+| `review` | Retain the human verdict | Which shot can enter editing? |
+
+## How this connects to LearnPrompt
+
+A video-model output is not completion evidence. Use [context and task verification](/en/start-here/context-task-verification/) to define a shot's success condition, then write prompts as a [testable generation recipe](/en/stable-diffusion/sd-prompt-syntax/) before scaling into batches and editing.
+
+## Further reading
+
+- [Zhipu asynchronous video-generation API](https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E8%A7%86%E9%A2%91%E7%94%9F%E6%88%90%E5%BC%82%E6%AD%A5)
+- [Zhipu video-generation prompt guide](https://docs.bigmodel.cn/cn/best-practice/prompt/video-prompt)

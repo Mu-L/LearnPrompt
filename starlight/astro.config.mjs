@@ -184,6 +184,11 @@ export default defineConfig({
           items: [{ autogenerate: { directory: "stable-diffusion" } }],
         },
         {
+          label: "AI 视频工作流",
+          translations: { en: "AI Video Workflows" },
+          items: [{ autogenerate: { directory: "ai-video" } }],
+        },
+        {
           label: "提示工程与可靠性",
           translations: { en: "Prompting & Reliability" },
           items: [{ autogenerate: { directory: "prompt-engineering" } }],

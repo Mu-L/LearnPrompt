@@ -49,6 +49,26 @@ const canonicalRedirects = [
     destination: "/prompt-engineering/reducing-gpt-hallucinations/",
     statusCode: 301,
   },
+  {
+    source: "/zh-Hans/docs/ai-human-generators/capcut/",
+    destination: "/ai-video/capcut-ai-video-workflow/",
+    statusCode: 301,
+  },
+  {
+    source: "/zh-Hans/docs/ai-human-generators/capcut",
+    destination: "/ai-video/capcut-ai-video-workflow/",
+    statusCode: 301,
+  },
+  {
+    source: "/docs/ai-video/zhipu-qingying-review/",
+    destination: "/ai-video/zhipu-qingying-ai-video/",
+    statusCode: 301,
+  },
+  {
+    source: "/docs/ai-video/zhipu-qingying-review",
+    destination: "/ai-video/zhipu-qingying-ai-video/",
+    statusCode: 301,
+  },
 ];
 
 const archiveRedirects = [
@@ -96,6 +116,14 @@ const legacyCanonicalPairs = [
   [
     "/zh-Hans/docs/prompt-engineering/reducing-gpt-hallucinations/",
     "/prompt-engineering/reducing-gpt-hallucinations/",
+  ],
+  [
+    "/zh-Hans/docs/ai-human-generators/capcut/",
+    "/ai-video/capcut-ai-video-workflow/",
+  ],
+  [
+    "/docs/ai-video/zhipu-qingying-review/",
+    "/ai-video/zhipu-qingying-ai-video/",
   ],
 ];
 

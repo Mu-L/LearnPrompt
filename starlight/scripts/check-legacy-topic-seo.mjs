@@ -24,6 +24,14 @@ const topics = [
     route: "/prompt-engineering/reducing-gpt-hallucinations/",
     links: ["/start-here/context-task-verification/", "/agent-engineering/feedback-loop/"],
   },
+  {
+    route: "/ai-video/capcut-ai-video-workflow/",
+    links: ["/start-here/context-task-verification/", "/ai-coding/project-checklist/"],
+  },
+  {
+    route: "/ai-video/zhipu-qingying-ai-video/",
+    links: ["/start-here/context-task-verification/", "/stable-diffusion/sd-prompt-syntax/"],
+  },
 ];
 
 const routeFile = (route) =>
