@@ -1,0 +1,49 @@
+---
+// "看真实案例" recommendation card, rendered in the Footer override on
+// every docs page. Points at goodcase.ai/cases, filtered by course topic
+// where the mapping is unambiguous (image / video / coding tools),
+// otherwise falls back to the unfiltered cases page.
+import { buildGoodCaseCourseFooterLink } from "../utils/goodcase";
+
+const { id, lang } = Astro.locals.starlightRoute;
+const isEnglish = lang === "en";
+const href = buildGoodCaseCourseFooterLink({ routeId: id });
+---
+
+<aside class="lp-card lp-goodcase-cta" aria-label={isEnglish ? "GoodCase.ai cases" : "看真实案例"}>
+  <p class="lp-goodcase-cta-title">{isEnglish ? "See Real Cases" : "看真实案例"}</p>
+  <p class="lp-goodcase-cta-copy">
+    {
+      isEnglish
+        ? "GoodCase.ai keeps the full prompt and a stability score behind cases like this one."
+        : "这篇教程里提到的效果，GoodCase.ai 收录了完整 Prompt 和稳定分，可以直接抄作业。"
+    }
+  </p>
+  <a class="lp-goodcase-cta-link" href={href} target="_blank" rel="noopener">
+    {isEnglish ? "Browse cases on GoodCase.ai" : "去 GoodCase.ai 看案例"} <span aria-hidden="true">→</span>
+  </a>
+</aside>
+
+<style>
+  .lp-goodcase-cta {
+    margin-top: 2rem;
+  }
+  .lp-goodcase-cta-title {
+    margin: 0 0 0.4rem;
+    font-weight: 600;
+    color: var(--sl-color-white);
+  }
+  .lp-goodcase-cta-copy {
+    margin: 0 0 0.75rem;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
+  }
+  .lp-goodcase-cta-link {
+    color: var(--sl-color-accent-high, var(--sl-color-accent));
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .lp-goodcase-cta-link:hover {
+    text-decoration: underline;
+  }
+</style>

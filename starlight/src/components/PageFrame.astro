@@ -1,0 +1,49 @@
+---
+// Wraps Starlight's built-in PageFrame to inject the cross-fleet
+// "produced by" strip above the fixed site header on every docs page.
+//
+// Starlight's header/sidebar are `position: fixed` starting at the
+// viewport top, so simply rendering the bar before them isn't enough —
+// the fixed elements would paint over it. The global overrides below push
+// them down by exactly the bar's height (kept in sync with
+// ProducedByBar.astro's `--lp-produced-by-height` fallback of 2.25rem).
+// This block only ships on pages that render PageFrame (Starlight docs
+// pages) — the three hand-built pages under src/pages/ don't use a fixed
+// header, so they don't need this and aren't affected by it.
+import Default from "@astrojs/starlight/components/PageFrame.astro";
+import ProducedByBar from "./ProducedByBar.astro";
+
+const { lang } = Astro.locals.starlightRoute;
+---
+
+<ProducedByBar lang={lang === "en" ? "en" : "zh"} />
+<Default>
+  <Fragment slot="header"><slot name="header" /></Fragment>
+  <Fragment slot="sidebar"><slot name="sidebar" /></Fragment>
+  <slot />
+</Default>
+
+<style>
+  :global(:root) {
+    --lp-produced-by-height: 2.25rem;
+  }
+  :global(.header) {
+    inset-block-start: var(--lp-produced-by-height) !important;
+  }
+  :global(.sidebar-pane) {
+    inset-block-start: calc(
+      var(--sl-nav-height) + var(--lp-produced-by-height)
+    ) !important;
+  }
+  :global(.main-frame) {
+    padding-top: calc(
+      var(--sl-nav-height) + var(--sl-mobile-toc-height) +
+        var(--lp-produced-by-height)
+    ) !important;
+  }
+  :global(mobile-starlight-toc nav) {
+    top: calc(
+      var(--sl-nav-height) + var(--lp-produced-by-height) - 1px
+    ) !important;
+  }
+</style>
