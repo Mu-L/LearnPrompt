@@ -1,0 +1,10 @@
+---
+// Wraps Starlight's built-in Footer to add the goodcase.ai recommendation
+// card below the normal edit-link / last-updated / pagination row, on
+// every docs page — one injection point instead of touching every MDX file.
+import Default from "@astrojs/starlight/components/Footer.astro";
+import GoodCaseCTA from "./GoodCaseCTA.astro";
+---
+
+<Default />
+<GoodCaseCTA />
