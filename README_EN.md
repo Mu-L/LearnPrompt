@@ -100,6 +100,12 @@ bugu chirps to report status while an agent grinds through long tasks, carl-were
 [![weread](https://img.shields.io/github/stars/LearnPrompt/carl-weread?style=flat&label=carl-weread)](https://github.com/LearnPrompt/carl-weread)
 [![x-article](https://img.shields.io/github/stars/LearnPrompt/x-article-publisher-skill?style=flat&label=x-article-publisher)](https://github.com/LearnPrompt/x-article-publisher-skill)
 
+**Andrej Karpathy Skills · Karpathy's working methods, packaged as Agent Skills**
+
+Karpathy has spent the last few years talking on X about how he does research, how he writes code, and how he checks in on his own changing abilities. I turned those into 14 installable Agent Skills, covering an automated research loop, idea files, LLM-simulated debates, meta-reflection, and a set of guidelines for writing code. If you want to think the way he does, installing them beats scrolling through his posts.
+
+[![karpathy-skills](https://img.shields.io/github/stars/LearnPrompt/andrej-karpathy-skills?style=flat&label=Karpathy%20Skills)](https://github.com/LearnPrompt/andrej-karpathy-skills)
+
 **Carl Skills · Turning real AI workflows into reusable skills**
 
 I test a lot of AI tools every day. But a video, an article, or a chat transcript gets buried quickly by the next wave of information.
