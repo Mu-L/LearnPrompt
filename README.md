@@ -100,6 +100,12 @@ bugu在agent干长活时用叫声报状态,carl-weread按你卡住的问题推�
 [![weread](https://img.shields.io/github/stars/LearnPrompt/carl-weread?style=flat&label=carl-weread)](https://github.com/LearnPrompt/carl-weread)
 [![x-article](https://img.shields.io/github/stars/LearnPrompt/x-article-publisher-skill?style=flat&label=x-article-publisher)](https://github.com/LearnPrompt/x-article-publisher-skill)
 
+**Andrej Karpathy Skills · 把Karpathy的工作方法装进Agent**
+
+Karpathy这几年在X上聊过不少方法论，怎么做研究，怎么写代码，怎么反思自己的能力变化。我把这些整理成14个能装的Agent Skills，自动化研究循环、idea文件、LLM模拟辩论、元反思和一份写代码的行为准则都在里面。想学他怎么想问题，装上试试比刷帖子有用。
+
+[![karpathy-skills](https://img.shields.io/github/stars/LearnPrompt/andrej-karpathy-skills?style=flat&label=Karpathy%20Skills)](https://github.com/LearnPrompt/andrej-karpathy-skills)
+
 **Carl Skills · 把真实AI工作流做成可复用的skills**
 
 我每天都会试很多AI工具，但一条视频，一篇文章，一次聊天记录，很快就会被新的信息盖过去。
